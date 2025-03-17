@@ -6,7 +6,7 @@ The Virtual CPU Project is a basic simulation of a CPU, designed to emulate the 
 
 ## Authors
 
-- Cartern Atnip
+- Carter Atnip
 - Dean Bar-Ner
 - Muhammed Hashir
 - Umer Seliya
