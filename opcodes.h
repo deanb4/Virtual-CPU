@@ -27,7 +27,7 @@ enum Opcode : uint8_t {
     XORI  = 0x0E,   // Opcode for xor immediate
     LW    = 0x23,   // Opcode for load word
     SW    = 0x2B,   // Opcode for store word
-    LB    = 0x20,   // Opcode for load byte
+    LB    = 0x50,   // Opcode for load byte
     LH    = 0x21,   // Opcode for load halfword
     SB    = 0x28,   // Opcode for store byte
     SH    = 0x29,   // Opcode for store halfword
@@ -40,7 +40,7 @@ enum Opcode : uint8_t {
     LUI   = 0x0F,   // Opcode for load upper immediate
 
     // J-Type Instructions
-    J     = 0x02,   // Opcode for jump
+    J     = 0x33,   // Opcode for jump
     JAL   = 0x03,   // Opcode for jump and link
     JR    = 0x0B,    // Function code for jump register (R-type with funct 0x08)
 

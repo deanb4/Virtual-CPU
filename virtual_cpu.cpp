@@ -40,103 +40,101 @@ void CPU::fetch(){
 * do necessary calculations and set necessary flags
 ****************************************/
 bool CPU::decodeExecute(ui32 instruction){
-
+    bool successfull = true;
     // extract instruction opcode (last 6 bits)
     ui8 opcode = instruction >> 26; 
 
     // Select Instruction Type (R, I ,J)
-    switch(opcode){
+   
         
         // R Type Instructions
         // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
-        case R_TYPE: 
-            ui8 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
-            ui8 rs =  instruction >> 21 & 0x1F; // source register
-            ui8 rt = instruction >> 16 & 0x1F; // target register
-            ui8 rd = instruction >> 11 & 0x1F; // destination register
-            ui8 shamt = instruction >> 6 & 0x1F;  // shift amount
+    if (opcode == R_TYPE){
+        ui8 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
+        ui8 rs =  instruction >> 21 & 0x1F; // source register
+        ui8 rt = instruction >> 16 & 0x1F; // target register
+        ui8 rd = instruction >> 11 & 0x1F; // destination register
+        ui8 shamt = instruction >> 6 & 0x1F;  // shift amount
 
-            // Handle R-type instructions based on function opcode
-            switch (function_opcode){
-                case ADD:
-                    registers[rd] = registers[rs] + registers[rt]; // add rd rs rt
-                    flags.setFlags(rd,rs,rt); // set flags
-                    break;
-                case SUB:
-                    registers[rd] = registers[rs] - registers[rt];  // sub rd rs rt
-                    flags.setFlags(rd,rs,rt); // set flags 
-                    break;
-                case MULT: 
-                    registers[rd] = registers[rs] * registers[rt]; // mult rd rs rt
-                    flags.setFlags(rd,rs,rt);
-                    break;
-                case DIV: 
-                    if (registers[rt] == 0) // check for division by 0 
-                        flags.setExceptionFlag(true);
-                    else {
-                        ui32 quotient = registers[rs] / registers[rt];
-                        ui32 remainder = registers[rs] % registers[rt];
-                       
-                        special_registers[SpecialRegisters::HI] = remainder; // remainder stored in HI 
-                        special_registers[SpecialRegisters::LO] = quotient; // quotient stored in LO
-                        registers[rd] = special_registers[SpecialRegisters::LO];
-                        flags.setFlags(rs,rt,rd);
-                    }
-                    break;
-                case MFHI: // move from HI register
-                    registers[rd] = special_registers[SpecialRegisters::HI]; 
-                    break;
-                case MFLO: // move from LO register
+        // Handle R-type instructions based on function opcode
+        switch (function_opcode){
+            case ADD:
+                registers[rd] = registers[rs] + registers[rt]; // add rd rs rt
+                flags.setFlags(rd,rs,rt); // set flags
+                break;
+            case SUB:
+                registers[rd] = registers[rs] - registers[rt];  // sub rd rs rt
+                flags.setFlags(rd,rs,rt); // set flags 
+                break;
+            case MULT: 
+                registers[rd] = registers[rs] * registers[rt]; // mult rd rs rt
+                flags.setFlags(rd,rs,rt);
+                break;
+            case DIV: 
+                if (registers[rt] == 0) // check for division by 0 
+                    flags.setExceptionFlag(true);
+                else {
+                    ui32 quotient = registers[rs] / registers[rt];
+                    ui32 remainder = registers[rs] % registers[rt];
+                    
+                    special_registers[SpecialRegisters::HI] = remainder; // remainder stored in HI 
+                    special_registers[SpecialRegisters::LO] = quotient; // quotient stored in LO
                     registers[rd] = special_registers[SpecialRegisters::LO];
-                    break;
-                case AND: // AND $rd, $rs, $rt
-                    registers[rd] = registers[rs] & registers[rt]; // bitwise AND 
-                    break;
-                case OR: 
-                    registers[rd] = registers[rs] | registers[rt]; //bitwise OR
-                    break;
-                case XOR: 
-                    registers[rd] = registers[rs] ^ registers[rt]; // bitwise XOR
-                    break;
-                case NOR:
-                    registers[rd] = ~(registers[rs] | registers[rt]); // bitwise NOR
-                    break;
-                case SLL: // SLL $rd, $rt, shamt  
-                    registers[rd] = registers[rt] << shamt; // Shift Left Logical: $rd = $rt << shamt
-                    break;
-                case SRL: // SRL $rd, $rt, shamt
-                    registers[rd] = registers[rt] >> shamt;
-                    break;
-                case JALR: // JALR $rd, $rs # Jump and Link Register: Jump to address in $rs, link to $rd
-                    registers[rd] = ++pc; 
-                    pc = registers[rs]; // set program counter to target address
-                    break;
+                    flags.setFlags(rs,rt,rd);
+                }
+                break;
+            case MFHI: // move from HI register
+                registers[rd] = special_registers[SpecialRegisters::HI]; 
+                break;
+            case MFLO: // move from LO register
+                registers[rd] = special_registers[SpecialRegisters::LO];
+                break;
+            case AND: // AND $rd, $rs, $rt
+                registers[rd] = registers[rs] & registers[rt]; // bitwise AND 
+                break;
+            case OR: 
+                registers[rd] = registers[rs] | registers[rt]; //bitwise OR
+                break;
+            case XOR: 
+                registers[rd] = registers[rs] ^ registers[rt]; // bitwise XOR
+                break;
+            case NOR:
+                registers[rd] = ~(registers[rs] | registers[rt]); // bitwise NOR
+                break;
+            case SLL: // SLL $rd, $rt, shamt  
+                registers[rd] = registers[rt] << shamt; // Shift Left Logical: $rd = $rt << shamt
+                break;
+            case SRL: // SRL $rd, $rt, shamt
+                registers[rd] = registers[rt] >> shamt;
+                break;
+            case JALR: // JALR $rd, $rs # Jump and Link Register: Jump to address in $rs, link to $rd
+                registers[rd] = ++pc; 
+                pc = registers[rs]; // set program counter to target address
+                break;
 
-            }
-            break;  // Exit the R-type case
-        
+        }
+            // break;  // Exit the R-type case
+    }
         // Jump Instructions
-        // // | Opcode (6 bits) | Address (26 bits) |
-        case J: // J target
-            utils::jumpOffset(instruction,pc); // set pc to target address
-            break;
-        case JAL:
-            registers[Registers::RA] = ++pc; // save address of next instruction (to return to)
-            utils::jumpOffset(instruction,pc); // set pc to target address
-            break;
-        
-        // Syscalls
-        case SYSCALL:
-            executeSyscall(); // execute syscalls
-            break;
-
-        // I Type Instructions
-        // |Opcode| |rs| |rd| |Immediate| Bits: (6,5,5,16)
-        default: 
-            ui8 rs = instruction >> 21 & 0x1F;
-            ui8 rd = instruction >> 16 & 0x1F;
-            ui16 immediate = instruction & 0xFFFF;
-            ui32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
+    // // | Opcode (6 bits) | Address (26 bits) |
+    else if (opcode == J){ // J target
+        utils::jumpOffset(instruction,pc); // set pc to target address
+    }
+    else if (opcode == JAL){
+        registers[Registers::RA] = ++pc; // save address of next instruction (to return to)
+        utils::jumpOffset(instruction,pc); // set pc to target address
+    }else if (opcode == SYSCALL){
+        executeSyscall(); // execute syscalls
+    }
+    
+    // I Type Instructions
+    // |Opcode| |rs| |rd| |Immediate| Bits: (6,5,5,16)
+    else if (opcode != J && opcode!= JAL && opcode != R_TYPE){
+        ui8 rs = instruction >> 21 & 0x1F;
+        ui8 rd = instruction >> 16 & 0x1F;
+        ui16 immediate = instruction & 0xFFFF;
+        ui32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
+        switch(opcode){
             case ADDI: // ADDI $rd, $rs, immediate 
                 registers[rd] = registers[rs] + sign_extended_imm;
                 flags.setFlags(rs,rd, sign_extended_imm);
@@ -171,12 +169,12 @@ bool CPU::decodeExecute(ui32 instruction){
                 break;
             case BEQ:  // BEQ $rs, $rt, offset
                 sign_extended_imm <<= 2; // shfit left by 2 to get correct address(32 bit mem so 4 bytes per mem location (2^2))
-                if (registers[rs] == registers[rt])
+                if (registers[rs] == registers[rd])
                     pc += sign_extended_imm;
                 break;
             case BNE:  // BNE (Branch if Not Equal)
                 sign_extended_imm <<= 2;
-                if (registers[rs] != registers[rt])
+                if (registers[rs] != registers[rd])
                     pc += sign_extended_imm;
                 break;
             case BGEZ: // BGEZ $t0, LABEL
@@ -203,8 +201,10 @@ bool CPU::decodeExecute(ui32 instruction){
                 registers[rd] = (immediate << 16); // shift imm to upper 16 bits
                 break;
 
-
+        }
     }
+
+    return successfull;
     
 } 
 
@@ -232,30 +232,35 @@ void CPU::executeSyscall(){
             std::cin >> val;
             registers[Registers::V0] = val;
             break;
-        case READ_FLOAT:
+        case READ_FLOAT: {
             float val;
             std::cin >> val;
             fp_registers[FloatingPointRegisters::F0] = val;
             break;
-        case READ_DOUBLE:
+        }
+        case READ_DOUBLE: {
             double val ;
             std::cin >> val;
             fp_registers[FloatingPointRegisters::F0] = val;
             break;
+        }
         case READ_STRING: // go over method
             utils::syscall_read_string(memory,registers);
             break;
-        case EXIT:
+        case EXIT: {
             halted = true;
             break;
-        case EXIT_STATUS:
+        }
+        case EXIT_STATUS: {
             ui32 exit_status = registers[Registers::A0];
             std::cerr << "Program exited with status: " << exit_status << "\n";
             halted = true;
             break;
-        case OPEN_FILE:
+        }
+        case OPEN_FILE:{
             utils::syscall_open_file(memory, registers,file_descriptors);
             break;
+        }
         case READ_FILE:
             utils::syscall_read_file(memory, registers, file_descriptors);
             break;

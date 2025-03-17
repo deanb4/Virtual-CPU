@@ -1,4 +1,5 @@
 #include "flags.h"
+#include "utils.h"
 
 Flags::Flags(): zeroFlag(false), negativeFlag(false), overflowFlag(false), carryFlag(false),
                 exceptionFlag(false), ltzFlag(false),gtzFlag(false) 

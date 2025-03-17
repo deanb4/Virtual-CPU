@@ -31,7 +31,7 @@ class CPU{
         ui32 sp;  // Stack pointer starts at this address 
         ui32 gp;  // Starting address for global variables  
         static const ui32 MEMORY_SIZE = (1 << 28); // 256 million ui32 words (1GB)
-        ui32 registers[NUM_REGISTERS]; // Registers
+        // ui32 registers[NUM_REGISTERS]; // Registers
         ui32 special_registers[NUM_SPECIAL_REGISTERS]; // special registers
         ui32 fp_registers[NUM_FP_REGISTERS]; // floating point registers
         bool halted; 
@@ -39,13 +39,14 @@ class CPU{
         ui32 pc; // program counter
         Flags flags; // flags for status
         std::unordered_map<i32, std::string> file_descriptors;
-
-    
-    public:
+        
+        
+        public:
+        ui32 registers[NUM_REGISTERS]; // Registers
         CPU(); // constructor
         void loadProgram(const std::vector<ui32>&);
         void fetch();
-        [[ nodiscard ]] bool decodeExecute(ui32);
+        bool decodeExecute(ui32); // make no discard after it returns exceptions
         void syscall(const ui32&);
         void executeSyscall();
         ~CPU(); // destructor

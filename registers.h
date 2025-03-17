@@ -20,7 +20,7 @@ enum Registers {
 
 // special registers
 enum SpecialRegisters {
-    HI, LO, PC, SP, STATUS, 
+    HI, LO, STATUS, 
     EPC, CAUSE, 
     NUM_SPECIAL_REGISTERS
 };

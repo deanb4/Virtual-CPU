@@ -2,11 +2,12 @@
 #define UTILS_H
 
 #include <cstdint>
+#include "registers.h"
+#include "syscalls.h"
 
 #define ui32 uint32_t
 #define i32 int32_t
 #define ui16 uint16_t
-
 
 namespace utils{
 
@@ -109,7 +110,7 @@ namespace utils{
                     i++;
                 }
                 reg[Registers::T0] = i; // offset from start of data segment in memory
-                std::copy(buffer.begin(), buffer.end(), mem[address]); // copy from buffer to memory
+                std::copy(buffer.begin(), buffer.end(), reinterpret_cast<ui32*>(mem) + address); // copy from buffer to memory
                 file.close();
             } else {
                 std::cerr << "Error: File is not open. " << "\n";
