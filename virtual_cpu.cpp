@@ -42,7 +42,8 @@ void CPU::fetch(){
 bool CPU::decodeExecute(ui32 instruction){
     bool successfull = true;
     // extract instruction opcode (last 6 bits)
-    ui8 opcode = instruction >> 26; 
+    ui32 opcode = instruction >> 24; 
+    std::cout << "opcode: " << std::hex <<  opcode << std::endl; // debugging
 
     // Select Instruction Type (R, I ,J)
    
@@ -50,6 +51,7 @@ bool CPU::decodeExecute(ui32 instruction){
         // R Type Instructions
         // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
     if (opcode == R_TYPE){
+        std::cout << "r type" << std::endl; //debugging
         ui8 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
         ui8 rs =  instruction >> 21 & 0x1F; // source register
         ui8 rt = instruction >> 16 & 0x1F; // target register
@@ -113,7 +115,6 @@ bool CPU::decodeExecute(ui32 instruction){
                 break;
 
         }
-            // break;  // Exit the R-type case
     }
         // Jump Instructions
     // // | Opcode (6 bits) | Address (26 bits) |
@@ -124,12 +125,14 @@ bool CPU::decodeExecute(ui32 instruction){
         registers[Registers::RA] = ++pc; // save address of next instruction (to return to)
         utils::jumpOffset(instruction,pc); // set pc to target address
     }else if (opcode == SYSCALL){
+        std::cout <<"executing syscall" << std::endl;
         executeSyscall(); // execute syscalls
     }
     
     // I Type Instructions
     // |Opcode| |rs| |rd| |Immediate| Bits: (6,5,5,16)
-    else if (opcode != J && opcode!= JAL && opcode != R_TYPE){
+    else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
+        std::cout << "i type" << std::endl; // debugging
         ui8 rs = instruction >> 21 & 0x1F;
         ui8 rd = instruction >> 16 & 0x1F;
         ui16 immediate = instruction & 0xFFFF;
@@ -225,7 +228,7 @@ void CPU::executeSyscall(){
             std::cout << static_cast<double>(fp_registers[FloatingPointRegisters::F12]) << "\n";
             break;
         case PRINT_STRING:
-            std::cout << registers[Registers::A0] << "\n";
+            std::cout << reinterpret_cast<const char*>(&memory[registers[Registers::A0]]) << "\n";
             break;
         case READ_INT:
             i32 val;

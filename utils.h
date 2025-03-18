@@ -4,7 +4,13 @@
 #include <cstdint>
 #include "registers.h"
 #include "syscalls.h"
-
+// had to include for carter
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <random>
+#include <fstream>
+// ******************
 #define ui32 uint32_t
 #define i32 int32_t
 #define ui16 uint16_t

@@ -35,13 +35,13 @@ class CPU{
         ui32 special_registers[NUM_SPECIAL_REGISTERS]; // special registers
         ui32 fp_registers[NUM_FP_REGISTERS]; // floating point registers
         bool halted; 
-        ui32* memory; // Memory
         ui32 pc; // program counter
         Flags flags; // flags for status
         std::unordered_map<i32, std::string> file_descriptors;
         
         
-        public:
+    public:
+        ui32* memory; // Memory
         ui32 registers[NUM_REGISTERS]; // Registers
         CPU(); // constructor
         void loadProgram(const std::vector<ui32>&);
