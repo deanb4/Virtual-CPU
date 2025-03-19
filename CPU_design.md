@@ -9,6 +9,9 @@
 # I-Type
 |Opcode| |rs| |rd| |Immediate| Bits: (6,5,5,16)
 
+# J type
+|Opcode| |Immediate| Bits: (6,26)
+
 ## Class Layout
 * use enum and array for resgisters for O(1) access and readability
 * enum for syscalls starting from 1 
@@ -261,3 +264,10 @@ eret        # Return from exception handler
 ### Memory Mapped I/O
 * 0xFFFF0000 - 0xFFFFFFFF
 * 4,294,967,296 - 4,294,967,295
+
+## Memory Layout New
+0x00000000 - 0x000FFFFF : TEXT_MEMORY        (1 MB)           // Code Section
+0x00010000 - 0x00400000 : GLOBAL_DATA_MEMORY  (4 MB)           // Global Data Section (initialized data)
+0x00400000 - 0x20000000 : HEAP_MEMORY         (512 MB)         // Heap Section (dynamic memory)
+0x3F000000 - 0x3FFFFFFF : STACK_MEMORY        (512 MB)         // Stack Section (grows downwards)
+0x7F000000 - 0x80000000 : KERNEL_MEMORY       (512 MB)         // Kernel Reserved Area (high memory)

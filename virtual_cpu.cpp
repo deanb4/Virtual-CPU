@@ -2,9 +2,13 @@
 
 // Constructor
 CPU::CPU(): memory(new ui32[MEMORY_SIZE]()), registers{0}, special_registers{0},
-            fp_registers{0}, sp(STACK_MEMORY), gp(GLOBAL_DATA_MEMORY),pc(0), halted(false) {
-    // Initializes Memory to 1GB, registers to 0, the sp and gp to respective memory locations,
-    // pc to 0 and halted to false
+            fp_registers{0}, sp(STACK_MEMORY_BOUND), gp(GLOBAL_DATA_MEMORY),pc(0), halted(false){
+                // Initializes Memory to 1GB, registers to 0, the sp and gp to respective memory locations,
+                // pc to 0 and halted to false
+            registers[SP] = sp;
+            registers[GP] = gp;
+            registers[SpecialRegisters::PC] = pc;
+
 }
 
 
@@ -24,13 +28,23 @@ void CPU::loadProgram(const std::vector<ui32>& program){
             throw std::out_of_range("Overflow of text segment: Program exceeds memory bounds.");
     }
     pc = TEXT_MEMORY;
+    registers[SpecialRegisters::PC] = pc;
 }
 
 // Fetch Instruction from memory and pass to decodeExecute
 void CPU::fetch(){
     ui32 instruction = memory[pc];
     pc++;
+    registers[SpecialRegisters::PC] = pc;
     decodeExecute(instruction);
+}
+
+
+// run cpu
+void CPU::run(){
+    while (!halted){
+        fetch();
+    }
 }
 
 /****************************************
@@ -41,23 +55,19 @@ void CPU::fetch(){
 ****************************************/
 bool CPU::decodeExecute(ui32 instruction){
     bool successfull = true;
+    
     // extract instruction opcode (last 6 bits)
-    ui32 opcode = instruction >> 24; 
-    std::cout << "opcode: " << std::hex <<  opcode << std::endl; // debugging
-
+    ui32 opcode = instruction >> 26; 
+    
     // Select Instruction Type (R, I ,J)
-   
-        
-        // R Type Instructions
-        // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
+    // R Type Instructions
+    // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
     if (opcode == R_TYPE){
-        std::cout << "r type" << std::endl; //debugging
-        ui8 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
-        ui8 rs =  instruction >> 21 & 0x1F; // source register
-        ui8 rt = instruction >> 16 & 0x1F; // target register
-        ui8 rd = instruction >> 11 & 0x1F; // destination register
-        ui8 shamt = instruction >> 6 & 0x1F;  // shift amount
-
+        ui32 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
+        ui32 rs = instruction >> 21 & 0x1F; // source register
+        ui32 rt = instruction >> 16 & 0x1F;// target register
+        ui32 rd = instruction >> 11 & 0x1F; // destination register
+        ui32 shamt = instruction >> 6 & 0x3F;  // shift amount
         // Handle R-type instructions based on function opcode
         switch (function_opcode){
             case ADD:
@@ -78,7 +88,6 @@ bool CPU::decodeExecute(ui32 instruction){
                 else {
                     ui32 quotient = registers[rs] / registers[rt];
                     ui32 remainder = registers[rs] % registers[rt];
-                    
                     special_registers[SpecialRegisters::HI] = remainder; // remainder stored in HI 
                     special_registers[SpecialRegisters::LO] = quotient; // quotient stored in LO
                     registers[rd] = special_registers[SpecialRegisters::LO];
@@ -112,11 +121,12 @@ bool CPU::decodeExecute(ui32 instruction){
             case JALR: // JALR $rd, $rs # Jump and Link Register: Jump to address in $rs, link to $rd
                 registers[rd] = ++pc; 
                 pc = registers[rs]; // set program counter to target address
+                registers[SpecialRegisters::PC] = pc;
                 break;
 
         }
     }
-        // Jump Instructions
+    // Jump Instructions
     // // | Opcode (6 bits) | Address (26 bits) |
     else if (opcode == J){ // J target
         utils::jumpOffset(instruction,pc); // set pc to target address
@@ -132,14 +142,15 @@ bool CPU::decodeExecute(ui32 instruction){
     // I Type Instructions
     // |Opcode| |rs| |rd| |Immediate| Bits: (6,5,5,16)
     else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
-        std::cout << "i type" << std::endl; // debugging
-        ui8 rs = instruction >> 21 & 0x1F;
-        ui8 rd = instruction >> 16 & 0x1F;
-        ui16 immediate = instruction & 0xFFFF;
-        ui32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
+        ui32 rs = instruction >> 21 & 0x1F;
+        ui32 rd = instruction >> 16 & 0x1F;
+        i32 immediate = instruction & 0xFFFF;
+        i32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
         switch(opcode){
             case ADDI: // ADDI $rd, $rs, immediate 
                 registers[rd] = registers[rs] + sign_extended_imm;
+                if (registers[rs] == SP)
+                    registers[SP] += sign_extended_imm;
                 flags.setFlags(rs,rd, sign_extended_imm);
                 break;
             case ANDI: // (AND Immediate)
@@ -147,16 +158,15 @@ bool CPU::decodeExecute(ui32 instruction){
                 break;
             case ORI:  // (OR Immediate)
                 registers[rd] = registers[rs] | sign_extended_imm;
-                // Handle ORI
                 break;
             case XORI: // (XOR Immediate)
                 registers[rd] = registers[rs] ^ sign_extended_imm;
                 break;
             case LW:   // (Load Word)
-                registers[rd] = memory[rs + sign_extended_imm];
+                registers[rd] = memory[registers[rs] + sign_extended_imm];
                 break;
             case SW:   // (Store Word)
-                memory[rs + sign_extended_imm] = registers[rd]; 
+                memory[(registers[rs]) + sign_extended_imm] = registers[rd]; 
                 break;
             case LB:   // (Load Byte) LB $rt, offset($rs)
                 registers[rd] = static_cast<ui8>(memory[rs+sign_extended_imm]);
@@ -184,24 +194,31 @@ bool CPU::decodeExecute(ui32 instruction){
                 sign_extended_imm <<= 2;
                 if (registers[rs] >= 0)
                     pc += sign_extended_imm;
+                    registers[SpecialRegisters::PC] = pc; 
                 break;
             case BLTZ: // BLTZ (Branch if Less Than Zero)
                 sign_extended_imm <<= 2;
                 if (registers[rs] < 0)
                     pc += sign_extended_imm;
+                    registers[SpecialRegisters::PC] = pc;
                 break;
             case BGTZ: // BGTZ (Branch if Greater Than Zero)
                 sign_extended_imm <<= 2;
                 if (registers[rs] > 0)
                     pc += sign_extended_imm;
+                    registers[SpecialRegisters::PC] = pc;
                 break;
             case BLEZ: // BLEZ (Branch if Less Than or Equal to Zero)
                 sign_extended_imm <<= 2;
                 if (registers[rs] <= 0)
                     pc += sign_extended_imm;
+                    registers[SpecialRegisters::PC] = pc;
                 break;
             case LUI:  // LUI (Load Upper Immediate)
                 registers[rd] = (immediate << 16); // shift imm to upper 16 bits
+                break;
+            case LI: // load immediate
+                registers[rd] = sign_extended_imm;
                 break;
 
         }

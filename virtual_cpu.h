@@ -16,10 +16,14 @@
 #include "registers.h"
 #include "syscalls.h"
 
-#define TEXT_MEMORY 0
+#define TEXT_MEMORY 0x00000000
 #define TEXT_MEMORY_BOUND 0x000FFFFF
-#define STACK_MEMORY 0x3FFFFFFF
 #define GLOBAL_DATA_MEMORY 0x00010000
+#define HEAP_MEMORY  0x00400000   
+#define HEAP_MEMORY_BOUND 0x20000000
+#define STACK_MEMORY 0x3F000000   
+#define STACK_MEMORY_BOUND 0x3FFFFFFF
+#define KERNEL_MEMORY 0x7F000000   
 #define ui32 uint32_t
 #define i32 int32_t
 #define ui8 uint8_t
@@ -30,7 +34,7 @@ class CPU{
     private:
         ui32 sp;  // Stack pointer starts at this address 
         ui32 gp;  // Starting address for global variables  
-        static const ui32 MEMORY_SIZE = (1 << 28); // 256 million ui32 words (1GB)
+        const ui32 MEMORY_SIZE = (1 << 31); // (2GB)
         // ui32 registers[NUM_REGISTERS]; // Registers
         ui32 special_registers[NUM_SPECIAL_REGISTERS]; // special registers
         ui32 fp_registers[NUM_FP_REGISTERS]; // floating point registers
@@ -41,14 +45,15 @@ class CPU{
         
         
     public:
-        ui32* memory; // Memory
-        ui32 registers[NUM_REGISTERS]; // Registers
+        ui32* memory; // Memory (remove from public)
+        ui32 registers[NUM_REGISTERS]; // Registers (remove from public)
         CPU(); // constructor
         void loadProgram(const std::vector<ui32>&);
         void fetch();
         bool decodeExecute(ui32); // make no discard after it returns exceptions
         void syscall(const ui32&);
         void executeSyscall();
+        void run();
         ~CPU(); // destructor
 
 };

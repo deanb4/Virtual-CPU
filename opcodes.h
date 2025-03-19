@@ -27,7 +27,7 @@ enum Opcode : uint8_t {
     XORI  = 0x0E,   // Opcode for xor immediate
     LW    = 0x23,   // Opcode for load word
     SW    = 0x2B,   // Opcode for store word
-    LB    = 0x50,   // Opcode for load byte
+    LB    = 0x11,   // Opcode for load byte ** changed
     LH    = 0x21,   // Opcode for load halfword
     SB    = 0x28,   // Opcode for store byte
     SH    = 0x29,   // Opcode for store halfword
@@ -36,8 +36,9 @@ enum Opcode : uint8_t {
     BGEZ  = 0x01,   // Opcode for branch if greater than or equal to zero (special handling for rt)
     BGTZ  = 0x07,   // Opcode for branch if greater than zero
     BLEZ  = 0x06,   // Opcode for branch if less than or equal to zero
-    BLTZ  = 0xCF,   // Opcode for branch if less than zero (special handling for rt) (**** change value)
+    BLTZ  = 0x3C,   // Opcode for branch if less than zero (special handling for rt) (**** change value)
     LUI   = 0x0F,   // Opcode for load upper immediate
+    LI    = 0x39,
 
     // J-Type Instructions
     J     = 0x33,   // Opcode for jump
@@ -45,7 +46,7 @@ enum Opcode : uint8_t {
     JR    = 0x0B,    // Function code for jump register (R-type with funct 0x08)
 
     //Syscall
-    SYSCALL = 0xAB,
+    SYSCALL = 0x3F,
 };
 
 #endif
