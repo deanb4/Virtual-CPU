@@ -645,9 +645,19 @@ bool CPU::decodeExecute(ui32 instruction){
     return successfull;
     
 } 
+/*
 
-void CPU::executeSyscall_pipeline(){
+    case SYSCALL: // execute in mem stage
+                ex_mem.syscall_code = id_ex.syscall_code;
+                ex_mem.arg1 = registers[Registers::A0];
+                ex_mem.arg2 = registers[Registers::A1];
+                ex_mem.arg3 = registers[Registers::A2];
+                ex_mem.arg4 = registers[Registers::A3];
     
+needs to use these 
+*/
+void CPU::executeSyscall_pipeline(){
+
 }
 
 // execute syscalls according to syscall in val register and then use the correct arg register to execute
