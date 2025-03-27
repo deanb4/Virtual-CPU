@@ -140,6 +140,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "link address: " << id_ex.link_address << std::endl;
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "EX_MEM REGISTER: " << std::endl;
+    std::cout << "--------------------------------------" << std::endl;
     std::cout << "alu result: " << ex_mem.alu_result << std::endl;
     std::cout << "store val: " << ex_mem.store_val << std::endl;
     std::cout << "store val2: " << ex_mem.store_val2 << std::endl;
@@ -153,6 +154,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "arg4: " << ex_mem.arg4 << std::endl;
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "MEM_WB REGISTER: " << std::endl;
+    std::cout << "--------------------------------------" << std::endl;
     std::cout << "alu result: " << mem_wb.alu_result << std::endl;
     std::cout << "destination register: " << mem_wb.destination_register << std::endl;
     std::cout << "memory data: " << mem_wb.mem_data << std::endl;
@@ -232,7 +234,6 @@ void CPU::decode(){
         // setting control signals
         control_unit.setControlSignals(opcode);
         control_unit.forward_control_signals(ex_mem);
-        id_ex.syscall_code = registers[Registers::V0];
         id_ex.opcode = opcode;
 
     } else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
@@ -241,6 +242,25 @@ void CPU::decode(){
         i32 immediate = instruction & 0xFFFF;
         i32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
 
+        // if reg V0 (for syscall) just place straight into reg
+        if (rd == V0){
+            id_ex.syscall_code = sign_extended_imm;
+        }
+        // arguments for syscall
+        switch (rd){
+            case A0:
+                id_ex.arg1 = sign_extended_imm;
+                break;
+            case A1:
+                id_ex.arg2 = sign_extended_imm;
+                break;
+            case A2:
+                id_ex.arg3 = sign_extended_imm;
+                break;
+            case A3:
+                id_ex.arg4 = sign_extended_imm;
+                break;
+        }
         // adding to pipeline registers
         id_ex.opcode = opcode;
         id_ex.rs = rs;
@@ -328,13 +348,14 @@ void CPU::execute(){
                 jump_address = utils::jumpOffsetPipeline(id_ex);
                 ex_mem.jump_address = jump_address;
                 ex_mem.link_address = id_ex.link_address;
-            case SYSCALL: // execute in mem stage
-                ex_mem.syscall_code = id_ex.syscall_code;
-                ex_mem.arg1 = registers[Registers::A0];
-                ex_mem.arg2 = registers[Registers::A1];
-                ex_mem.arg3 = registers[Registers::A2];
-                ex_mem.arg4 = registers[Registers::A3];
-
+            case SYSCALL: 
+                std::cout << "Executing Syscall" << std::endl; // debug
+                registers[Registers::A0] = id_ex.arg1;
+                registers[Registers::A1] = id_ex.arg2;
+                registers[Registers::A2] = id_ex.arg3;
+                registers[Registers::A3] = id_ex.arg4;
+                registers[Registers::V0] = id_ex.syscall_code;
+                executeSyscall();
             // update for pipeline
             case ADDI: // ADDI $rd, $rs, immediate 
                 ex_mem.alu_result = id_ex.rs + id_ex.immediate;
@@ -437,14 +458,15 @@ void CPU::mem(){
     mem_wb.alu_result = ex_mem.alu_result;
     mem_wb.reg_write = ex_mem.reg_write;
     mem_wb.mem_to_reg = ex_mem.mem_to_reg;
+
+    // *********
     // if control signal to read from memory is set to 1
     if (ex_mem.mem_read == 1){
         mem_wb.mem_data = memory[ex_mem.alu_result];
     } else if (ex_mem.mem_write == 1){
         memory[ex_mem.alu_result] = ex_mem.store_val; 
-    } else {
-        std::cout << "Skipping mem" << std::endl; // debug
-    }
+    } 
+  
 }
 
 // write back to registers
@@ -453,12 +475,11 @@ void CPU::WB(){
     wb_display.opcode = mem_wb.opcode; // forward for displaying final stage of pipeline
     if (mem_wb.reg_write == 1 && mem_wb.mem_to_reg == 1){
         registers[mem_wb.destination_register] = mem_wb.mem_data;
-
+        
     } else if (mem_wb.reg_write == 1 && mem_wb.mem_to_reg == 0){
         registers[mem_wb.destination_register] = mem_wb.alu_result;
-    } else {
-        std::cout << "skipping WB" << std::endl; // debug
-    }
+    } 
+    
 }
 
 /****************************************
@@ -645,19 +666,70 @@ bool CPU::decodeExecute(ui32 instruction){
     return successfull;
     
 } 
-/*
 
-    case SYSCALL: // execute in mem stage
-                ex_mem.syscall_code = id_ex.syscall_code;
-                ex_mem.arg1 = registers[Registers::A0];
-                ex_mem.arg2 = registers[Registers::A1];
-                ex_mem.arg3 = registers[Registers::A2];
-                ex_mem.arg4 = registers[Registers::A3];
-    
-needs to use these 
-*/
+// syscall for pipelined cpu * just switches out A0 reg for ex_mem.arg1 (might be able to remove)
 void CPU::executeSyscall_pipeline(){
-
+    ui32 syscall_val = ex_mem.syscall_code; // get syscall val from reg V0
+    switch(syscall_val){
+        case PRINT_INT:
+            std::cout << ex_mem.arg1 << "\n";
+            break;
+        case PRINT_FLOAT:
+            std::cout << static_cast<float>(fp_registers[FloatingPointRegisters::F12]) << "\n";
+            break;
+        case PRINT_DOUBLE:
+            std::cout << static_cast<double>(fp_registers[FloatingPointRegisters::F12]) << "\n";
+            break;
+        case PRINT_STRING:
+            std::cout << reinterpret_cast<const char*>(&memory[ex_mem.arg1]) << "\n";
+            break;
+        case READ_INT:
+            i32 val;
+            std::cin >> val;
+            registers[ex_mem.syscall_code] = val;
+            break;
+        case READ_FLOAT: {
+            float val;
+            std::cin >> val;
+            fp_registers[FloatingPointRegisters::F0] = val;
+            break;
+        }
+        case READ_DOUBLE: {
+            double val ;
+            std::cin >> val;
+            fp_registers[FloatingPointRegisters::F0] = val;
+            break;
+        }
+        case READ_STRING: // go over method
+            utils::syscall_read_string(memory,registers);
+            break;
+        case EXIT: {
+            halted = true;
+            break;
+        }
+        case EXIT_STATUS: {
+            ui32 exit_status = ex_mem.arg1;
+            std::cerr << "Program exited with status: " << exit_status << "\n";
+            halted = true;
+            break;
+        }
+        case OPEN_FILE:{
+            utils::syscall_open_file(memory, registers,file_descriptors);
+            break;
+        }
+        case READ_FILE:
+            utils::syscall_read_file(memory, registers, file_descriptors);
+            break;
+        case WRITE_FILE:
+            utils::syscall_write_file(memory, registers, file_descriptors);
+            break;
+        case CLOSE_FILE:
+            utils::syscall_close_file(file_descriptors);
+            break;
+        case EXIT_WITH_STATUS:
+            utils::syscall_exit_status(registers, halted);
+            break;
+    }
 }
 
 // execute syscalls according to syscall in val register and then use the correct arg register to execute

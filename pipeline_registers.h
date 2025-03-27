@@ -25,6 +25,7 @@ struct ID_EX {
     uint32_t jump_address;
     uint32_t syscall_code;
     uint32_t link_address;
+    uint32_t arg1, arg2, arg3, arg4;
 
     // Add control signals
     uint8_t mem_read;      // MemRead
@@ -36,7 +37,8 @@ struct ID_EX {
 
     ID_EX(): opcode(0), instruction(0), rs(0), rt(0), rd(0), immediate(0), shamt(0),
             function_opcode(0), jump_address(0), syscall_code(0), link_address(0),
-            mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0){}
+            mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0),
+            arg1(0), arg2(0), arg3(0), arg4(0){}
     
 };
 
