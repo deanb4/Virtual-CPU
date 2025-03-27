@@ -1,5 +1,8 @@
 #include "flags.h"
 #include "utils.h"
+// change class to change exception flag to false whenever theres any exception
+// add epc and cause updates on exception (special registers)
+
 
 Flags::Flags(): zeroFlag(false), negativeFlag(false), overflowFlag(false), carryFlag(false),
                 exceptionFlag(false), ltzFlag(false),gtzFlag(false) 

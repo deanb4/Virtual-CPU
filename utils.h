@@ -4,6 +4,8 @@
 #include <cstdint>
 #include "registers.h"
 #include "syscalls.h"
+#include "virtual_cpu.h"
+#include "pipeline_registers.h"
 // had to include for carter
 #include <iostream>
 #include <string>
@@ -27,10 +29,19 @@ namespace utils{
     // used for J and JAL to get target pc
     void jumpOffset(ui32 instruction, ui32& pc){
         ui32 target = instruction & 0x03FFFFFF; // mask lower 26 bits
-        target <<= 2; // shift target address by 2
+        // target <<= 2; // shift target address by 2 (check doesnt make sense)
         ui32 upper_pc = pc & 0xF0000000; // get upper 4 bits from pc. Ensures that jumps remain within the same 256MB region of memory
         ui32 jump_address = upper_pc | target; // form full address
         pc = jump_address;
+
+    }
+
+    ui32 jumpOffsetPipeline(ID_EX id_ex){
+        ui32 target = id_ex.instruction & 0x03FFFFFF; // mask lower 26 bits
+        // check for shifting amt
+        ui32 upper_pc = id_ex.link_address & 0xF0000000; // get upper 4 bits from pc. Ensures that jumps remain within the same 256MB region of memory
+        ui32 jump_address = upper_pc | target; // form full address
+        return jump_address;
     }
 
     // sign extend utility function 
@@ -170,6 +181,50 @@ namespace utils{
         reg[Registers::V0] = exit_status;
 
     }
+
+    // util function to display registers
+    std::string get_general_register(ui32 reg){
+        std::unordered_map<int, std::string> regToStr {
+            {ZERO, "$zero"},
+            {AT, "$at"},
+            {V0, "$v0"},
+            {V1, "$v1"},
+            {A0, "$a0"},
+            {A1, "$a1"},
+            {A2, "$a2"},
+            {A3, "$a3"},
+            {T0, "$t0"},
+            {T1, "$t1"},
+            {T2, "$t2"},
+            {T3, "$t3"},
+            {T4, "$t4"},
+            {T5, "$t5"},
+            {T6, "$t6"},
+            {T7, "$t7"},
+            {S0, "$s0"},
+            {S1, "$s1"},
+            {S2, "$s2"},
+            {S3, "$s3"},
+            {S4, "$s4"},
+            {S5, "$s5"},
+            {S6, "$s6"},
+            {S7, "$s7"},
+            {T8, "$t8"},
+            {T9, "$t9"},
+            {K0, "$k0"},
+            {K1, "$k1"},
+            {GP, "$gp"},
+            {SP, "$sp"},
+            {FP, "$fp"},
+            {RA, "$ra"}
+        };
+        
+         // display registers
+        return regToStr[reg];
+   
+        
+    }
+
 
 };
 

@@ -162,7 +162,7 @@ Control registers are used for various control operations, such as handling exce
 j target          # Jump to target address
 jr $rs           # Jump to address in register $rs (used for function returns)
 jal target       # Jump and link (stores return address in $ra)
-jalr $rd, $rs    # Jump and link register (stores return address in $rd, jumps to $rs)
+jalr $rs, $rd    # Jump and link register (stores return address in $rd, jumps to $rs)
 
 # Conditional Branch Instructions ((might not implement all of them))
 beq $rs, $rt, offset   # Branch if $rs == $rt
@@ -271,3 +271,256 @@ eret        # Return from exception handler
 0x00400000 - 0x20000000 : HEAP_MEMORY         (512 MB)         // Heap Section (dynamic memory)
 0x3F000000 - 0x3FFFFFFF : STACK_MEMORY        (512 MB)         // Stack Section (grows downwards)
 0x7F000000 - 0x80000000 : KERNEL_MEMORY       (512 MB)         // Kernel Reserved Area (high memory)
+
+## *************Pipeline
+1. IF (Instruction Fetch): Fetches instruction from memory.
+2. ID (Instruction Decode & Register Read): Decodes the instruction and reads register values.
+3. EX (Execute): Performs ALU operations and computes memory addresses.
+4. MEM (Memory Access): Reads from or writes to memory.
+5. WB (Write-Back): Writes the result to the destination register.
+
+1. IF/ID Register (Between IF & ID)
+   - Instruction (IR): The fetched instruction (32-bit).
+   - PC+4: Address of the next instruction.
+
+2. ID/EX Register (Between ID & EX)
+   - Read Register Values (R1, R2): The values from the source registers.
+   - Immediate (Imm): Sign-extended immediate value (for I-type instructions).
+   - Control Signals: ALU operation, register destination, memory read/write, etc.
+   - Destination Register (RD or RT): The register that will receive the result.
+
+3. EX/MEM Register (Between EX & MEM)
+   - ALU Result: Computed result (e.g., addition, logical operation, memory address).
+   - Store Data (R2): Value to be stored (if it's a `sw` instruction).
+   - Control Signals: Whether to read/write memory or write back to a register.
+   - Destination Register: Register that will receive the result.
+
+4. MEM/WB Register (Between MEM & WB)
+   - ALU Result or Memory Data: The result from the ALU or the loaded memory value (if `lw`).
+   - Destination Register: The register that will be updated.
+   - Control Signals: Whether to write to the register file.
+
+
+   We will execute these instructions through the pipeline, with the pipeline stages overlapping in each cycle.
+
+### Program to Simulate 5-Stage Pipeline
+
+```assembly
+    add $t0, $t1, $t2
+    sub $t3, $t4, $t5
+    lw $t6, 0($t7)
+    sw $t8, 4($t9)
+    beq $t0, $t1, label
+```
+### **Execution Cycle Breakdown**
+
+| Cycle | IF (Fetch)  | ID (Decode)  | EX (Execute)  | MEM (Memory)  | WB (Write-back) |
+|-------|-------------|--------------|---------------|---------------|-----------------|
+| 1     | ADD         |              |               |               |                 |
+| 2     | SUB         | ADD          |               |               |                 |
+| 3     | LW          | SUB          | ADD           |               |                 |
+| 4     | SW          | LW           | SUB           | ADD           |                 |
+| 5     | BEQ         | SW           | LW            | SUB           | ADD             |
+| 6     |             | BEQ          | SW            | LW            | SUB             |
+
+### **Explanation of Each Cycle:**
+
+1. **Cycle 1**:
+   - **IF**: Instruction `ADD $t0, $t1, $t2` is fetched.
+   
+2. **Cycle 2**:
+   - **IF**: Instruction `SUB $t3, $t4, $t5` is fetched.
+   - **ID**: Instruction `ADD` is decoded and the operands (`$t1`, `$t2`) are read.
+   
+3. **Cycle 3**:
+   - **IF**: Instruction `LW $t6, 0($t7)` is fetched.
+   - **ID**: Instruction `SUB` is decoded and the operands (`$t4`, `$t5`) are read.
+   - **EX**: The `ADD` instruction is executed, and the result is computed.
+
+4. **Cycle 4**:
+   - **IF**: Instruction `SW $t8, 4($t9)` is fetched.
+   - **ID**: Instruction `LW` is decoded and the address `0($t7)` is calculated.
+   - **EX**: Instruction `SUB` is executed, and the result is computed.
+   - **MEM**: `ADD` is completed, and the result is written back to the register file.
+
+5. **Cycle 5**:
+   - **IF**: Instruction `BEQ $t0, $t1, label` is fetched.
+   - **ID**: Instruction `SW` is decoded and the address `4($t9)` is calculated.
+   - **EX**: Instruction `LW` performs the memory read.
+   - **MEM**: Instruction `SUB` performs memory operations.
+   - **WB**: Instruction `ADD` writes the result back to `$t0`.
+
+6. **Cycle 6** (and onward):
+   - The pipeline continues by decoding and executing the next instructions, following the same pattern.
+
+## Pipeline Hazards
+Forwarding
+Branch Prediction
+stalls
+data hazards
+add display pipeline at every stage to debug method (display it in a graph layout)
+
+## **********Error Handeling (Exceptions)
+Memory errors: Add function that checks for valid memory to use before accessing memory at any point. 
+Invalid instruction: Check before decoding if opcode is valid. If invalid put that instruction memory location in epc special register
+change that on division by 0 and other exceptions I add that address to epc to display to user at what instruction program failed
+Valid Syscall: Check that syscall val is valid if not return address of syscall inst to epc speical register
+Check exception syscall usage 
+
+The following outlines the steps taken when an exception occurs in the CPU, (following the MIPS-like architecture)
+
+1. **Exception Detected**:
+   - During instruction execution, if an exception condition (such as overflow, division by zero, illegal instruction, etc.) is detected, normal execution is interrupted.
+
+2. **Set Exception Flag**:
+   - The `exceptionFlag` is set to `true`, signaling that an exception has occurred.
+   - This flag is checked by the CPU to determine if an exception handler should be invoked.
+
+3. **Save Instruction Address in EPC Register**:
+   - The **EPC Register** (Exception Program Counter) is set to the address of the instruction that caused the exception.
+   - This ensures the CPU knows where to resume execution once the exception is handled.
+
+4. **Set the Cause Register**:
+   - The **Cause Register** is set to a specific value, indicating the type of exception (e.g., overflow, division by zero).
+   - The value in the Cause Register helps the CPU identify the specific exception type and take the appropriate action.
+
+5. **Jump to Exception Handler**:
+   - After setting the necessary flags and registers, control is transferred to an exception handler that will handle the exception appropriately.
+   - The handler uses the value in the **Cause Register** to decide what action to take (e.g., terminating the program, retrying the operation).
+
+6. **Handle the Exception**:
+   - The exception handler inspects the **Cause Register** to identify the exception type and responds accordingly (e.g., error message, recovery routine).
+
+7. **Return from Exception**:
+   - After handling the exception, the CPU retrieves the address of the instruction that caused the exception from the **EPC Register**.
+   - Execution resumes from the address stored in EPC, ensuring that the program continues after the exception.
+
+### Table of Exception Codes (not all used)
+
+| Exception Type                 | Cause Register Value |
+|---------------------------------|----------------------|
+| **Interrupt**                   | 0x00                 |
+| **TLB Mod**                     | 0x01                 |
+| **TLB Load**                    | 0x02                 |
+| **TLB Store**                   | 0x03                 |
+| **Address Error (Load/Store)**  | 0x04                 |
+| **Bus Error**                   | 0x05                 |
+| **System Call**                 | 0x08                 |
+| **Break**                       | 0x09                 |
+| **Reserved Instruction**        | 0x0A                 |
+| **Coprocessor Unusable**        | 0x0B                 |
+| **Overflow**                    | 0x0C                 |
+| **Trap**                        | 0x0D                 |
+| **Floating Point Exception**    | 0x10                 |
+| **Virtualization Exception**    | 0x18                 |
+| **Watchdog Timer**              | 0x20                 |
+| **External Interrupt**          | 0x30                 |
+| **Division by Zero**            | 0x04                 |
+| **Invalid Instruction**         | 0x02                 |
+
+
+
+## Cache 
+
+
+## Add Performence metric capabilities (such as when using perf/time)
+
+## Floating Point (maybe?)
+
+
+** divide update 
+div $s, $t         # Divide $s by $t, quotient in lo, remainder in hi
+mflo $d            # Move quotient to $d
+mfhi $r            # Move remainder to $r (optional)
+
+
+# Control Unit
+- **RegDst**: Selects destination register (0 = rt, 1 = rd).
+- **ALUSrc**: Selects ALU input (0 = register, 1 = immediate).
+- **MemToReg**: Determines if data comes from memory (1) or ALU (0).
+- **RegWrite**: Enables writing to the register file.
+- **MemRead**: Enables reading from memory.
+- **MemWrite**: Enables writing to memory.
+- **Branch**: Indicates a branch instruction.
+- **Jump**: Indicates a jump instruction.
+- **ALUOp**: Specifies the ALU operation.
+
+| Opcode  | Instruction | RegDst | ALUSrc | MemToReg | RegWrite | MemRead | MemWrite | Branch | Jump | ALUOp |
+|---------|------------|--------|--------|----------|----------|---------|---------|--------|------|-------|
+| 0x00    | R-TYPE    | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x20    | ADD       | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x22    | SUB       | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x18    | MULT      | 1      | 0      | 0        | 0        | 0       | 0       | 0      | 0    | 10    |
+| 0x1A    | DIV       | 1      | 0      | 0        | 0        | 0       | 0       | 0      | 0    | 10    |
+| 0x10    | MFHI      | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x12    | MFLO      | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x24    | AND       | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x25    | OR        | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x26    | XOR       | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x27    | NOR       | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x00    | SLL       | 1      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x02    | SRL       | 1      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 10    |
+| 0x09    | JALR      | 1      | 0      | 0        | 1        | 0       | 0       | 0      | 1    | 10    |
+| 0x08    | ADDI      | 0      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 00    |
+| 0x0C    | ANDI      | 0      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 11    |
+| 0x0D    | ORI       | 0      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 11    |
+| 0x0E    | XORI      | 0      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 11    |
+| 0x23    | LW        | 0      | 1      | 1        | 1        | 1       | 0       | 0      | 0    | 00    |
+| 0x2B    | SW        | X      | 1      | X        | 0        | 0       | 1       | 0      | 0    | 00    |
+| 0x11    | LB        | 0      | 1      | 1        | 1        | 1       | 0       | 0      | 0    | 00    |
+| 0x21    | LH        | 0      | 1      | 1        | 1        | 1       | 0       | 0      | 0    | 00    |
+| 0x28    | SB        | X      | 1      | X        | 0        | 0       | 1       | 0      | 0    | 00    |
+| 0x29    | SH        | X      | 1      | X        | 0        | 0       | 1       | 0      | 0    | 00    |
+| 0x04    | BEQ       | X      | 0      | X        | 0        | 0       | 0       | 1      | 0    | 01    |
+| 0x05    | BNE       | X      | 0      | X        | 0        | 0       | 0       | 1      | 0    | 01    |
+| 0x01    | BGEZ      | X      | 0      | X        | 0        | 0       | 0       | 1      | 0    | 01    |
+| 0x07    | BGTZ      | X      | 0      | X        | 0        | 0       | 0       | 1      | 0    | 01    |
+| 0x06    | BLEZ      | X      | 0      | X        | 0        | 0       | 0       | 1      | 0    | 01    |
+| 0x3C    | BLTZ      | X      | 0      | X        | 0        | 0       | 0       | 1      | 0    | 01    |
+| 0x0F    | LUI       | 0      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 11    |
+| 0x39    | LI        | 0      | 1      | 0        | 1        | 0       | 0       | 0      | 0    | 11    |
+| 0x33    | J         | X      | X      | X        | 0        | 0       | 0       | 0      | 1    | XX    |
+| 0x03    | JAL       | X      | X      | X        | 1        | 0       | 0       | 0      | 1    | XX    |
+| 0x0B    | JR        | X      | X      | X        | 0        | 0       | 0       | 0      | 1    | XX    |
+| 0x3F    | SYSCALL   | X      | X      | X        | 0        | 0       | 0       | 0      | 0    | XX    |
+
+- `X` indicates that the signal is not relevant for that instruction.
+- `ALUOp` values: `00` = add/sub, `01` = branch comparison, `10` = R-type operation, `11` = bitwise ops.
+
+
+# Control Signals in a 5-Bit Control Unit
+## Control Signals Overview
+
+### **ALUOp**
+Defines the operation the ALU will perform.
+
+| Value (Binary) | Effect |
+|---------------|--------|
+| `00` | The ALU performs an add operation. |
+| `01` | The ALU performs a subtract operation. |
+| `10` | The function field of the instruction determines the ALU operation. |
+
+### **ALUSrcB**
+Determines the second input to the ALU.
+
+| Value (Binary) | Effect |
+|---------------|--------|
+| `00` | The second input to the ALU comes from the B register. |
+| `01` | The second input to the ALU is the constant `4`. |
+| `10` | The second input to the ALU is the sign-extended, lower 16 bits of the instruction register (IR). |
+| `11` | The second input to the ALU is the sign-extended, lower 16 bits of the IR shifted left by 2 bits. |
+
+### **PCSource**
+Determines the source of the value written to the program counter (PC).
+
+| Value (Binary) | Effect |
+|---------------|--------|
+| `00` | The output of the ALU (`PC + 4`) is sent to the PC for writing. |
+| `01` | The contents of `ALUOut` (the branch target address) are sent to the PC for writing. |
+| `10` | The jump target address (`IR[25:0]` shifted left by 2 bits and concatenated with `PC + 4[31:28]`) is sent to the PC for writing. |
+
+## Notes
+- `ALUOp` determines whether the ALU performs addition, subtraction, or an operation based on the instruction’s function field.
+- `ALUSrcB` selects the second operand for ALU computations.
+- `PCSource` selects the next address to be loaded into the PC.
+
