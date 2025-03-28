@@ -366,6 +366,8 @@ Invalid instruction: Check before decoding if opcode is valid. If invalid put th
 change that on division by 0 and other exceptions I add that address to epc to display to user at what instruction program failed
 Valid Syscall: Check that syscall val is valid if not return address of syscall inst to epc speical register
 Check exception syscall usage 
+** create function handleExcpetion() that is called at the end of every execute stage. if flags.excpetion is true then run the handle exception function
+** go over each flag exception case and return correct throw error.
 
 The following outlines the steps taken when an exception occurs in the CPU, (following the MIPS-like architecture)
 

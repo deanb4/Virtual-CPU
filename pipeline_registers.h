@@ -7,8 +7,14 @@
 struct IF_ID {
     uint32_t instruction;
     uint32_t next_instruction;
+    uint32_t link_address;
 
-    IF_ID(): instruction(0), next_instruction(0){}
+    IF_ID(): instruction(0), next_instruction(0), link_address(0){}
+    
+    void flush(){
+        instruction = 0;
+        next_instruction = 0;
+    }
 
 };
 
@@ -17,8 +23,10 @@ struct ID_EX {
     uint32_t opcode;
     uint32_t instruction;
     uint32_t rs;
+    uint32_t branch_rs;
     uint32_t rt;
     uint32_t rd;
+    uint32_t branch_rd;
     uint32_t immediate;
     uint32_t shamt;
     uint32_t function_opcode;
@@ -35,10 +43,28 @@ struct ID_EX {
     uint8_t alu_src;       // ALUSrc
     uint8_t reg_dst;       // ALUSrc
 
-    ID_EX(): opcode(0), instruction(0), rs(0), rt(0), rd(0), immediate(0), shamt(0),
+    ID_EX(): opcode(0), instruction(0), rs(0), branch_rs(0), rt(0), rd(0), branch_rd(0), immediate(0), shamt(0),
             function_opcode(0), jump_address(0), syscall_code(0), link_address(0),
             mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0),
             arg1(0), arg2(0), arg3(0), arg4(0){}
+
+    void flush(){
+        opcode = 0;
+        instruction = 0;
+        rs = 0;
+        rt = 0;
+        rd = 0;
+        immediate = 0;
+        shamt = 0;
+        function_opcode = 0;
+        jump_address = 0;
+        syscall_code = 0;
+        link_address = 0;
+        arg1 = 0;
+        arg2 = 0;
+        arg3 = 0;
+        arg4 = 0;
+    }
     
 };
 

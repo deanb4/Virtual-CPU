@@ -43,11 +43,21 @@ void CPU::fetch(){
 // fetch pipeline ** check
 void CPU::fetch_pipeline(){
     ui32 instruction = memory[pc];
-    pc++;
+    // check for branch. If pc src is 1 change pc to jump address and flush if_id and id_ex
+    if (control_unit.pc_src == 1){ 
+        pc = ex_mem.link_address;
+        std::cout << "PC: " << ex_mem.link_address << std::endl; // debug
+        instruction = memory[pc];
+        control_unit.pc_src = 0;
+        if_id.flush();
+        id_ex.flush(); // might need to remove**
+    } else {
+        pc++;
+    }
     special_registers[SpecialRegisters::PC] = pc;
     if_id.instruction = instruction;
-    std::cout << (instruction >> 26) << std::endl; // debug
     if_id.next_instruction = pc;
+    if_id.link_address = pc; // for branch 
 }
 
 // display registers
@@ -196,6 +206,7 @@ void CPU::decode(){
     // make boolean function
     ui32 instruction = if_id.instruction; // get instruction from pipeline register
     ui32 opcode = instruction >> 26;
+    id_ex.link_address = if_id.link_address; // for branch
     if (opcode == R_TYPE){
         ui32 rs = instruction >> 21 & 0x1F; // source register
         ui32 rt = instruction >> 16 & 0x1F;// target register
@@ -241,7 +252,6 @@ void CPU::decode(){
         ui32 rd = instruction >> 16 & 0x1F;
         i32 immediate = instruction & 0xFFFF;
         i32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
-
         // if reg V0 (for syscall) just place straight into reg
         if (rd == V0){
             id_ex.syscall_code = sign_extended_imm;
@@ -265,6 +275,13 @@ void CPU::decode(){
         id_ex.opcode = opcode;
         id_ex.rs = rs;
         id_ex.rd = rd;
+        // for branch
+        if (opcode == BEQ || opcode == BGEZ || opcode == BGTZ || opcode == BLEZ || opcode == BLTZ){
+            id_ex.branch_rd = rd;
+            id_ex.branch_rs = rs;
+            control_unit.branch = 1;
+        }
+
         id_ex.immediate = sign_extended_imm;
 
         // setting control signals
@@ -280,6 +297,7 @@ void CPU::execute(){
     ui32 jump_address = 0;
     ui32 quotient = 0;
     ui32 remainder = 0;
+    ui32 branch_address = id_ex.link_address; // remove
     ex_mem.opcode = id_ex.opcode;
     if (id_ex.opcode == R_TYPE){
         // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
@@ -399,39 +417,46 @@ void CPU::execute(){
                 // memory[rs+sign_extended_imm] = static_cast<ui16>(registers[rd]);
                 break;
             case BEQ:  // BEQ $rs, $rt, offset
-                // sign_extended_imm <<= 2; // shfit left by 2 to get correct address(32 bit mem so 4 bytes per mem location (2^2))
-                if (id_ex.rs == id_ex.rd)
-                    ex_mem.link_address = id_ex.link_address + id_ex.immediate; // forward new pc
+                if (registers[id_ex.rs] == id_ex.branch_rd || registers[id_ex.rd] == id_ex.branch_rs){ // need to check but should work
+                    ex_mem.link_address = id_ex.link_address + id_ex.immediate; // forward new pc (change)
+                    control_unit.pc_src = 1;
+                }
+                    // pc = ex_mem.link_address;
                     // special_registers[SpecialRegisters::PC] = pc;
                 break;
             case BNE:  // BNE (Branch if Not Equal)
                 // sign_extended_imm <<= 2;
                 if (id_ex.rs != id_ex.rd)
                     ex_mem.link_address = id_ex.link_address + id_ex.immediate; // forward new PC
+                    control_unit.pc_src = 1;
                     // special_registers[SpecialRegisters::PC] = pc;
                 break;
             case BGEZ: // BGEZ $t0, LABEL
                 // sign_extended_imm <<= 2;
                 if (id_ex.rs >= 0)
                     ex_mem.link_address = id_ex.link_address + id_ex.immediate; // forward new PC
+                    control_unit.pc_src = 1;
                     // special_registers[SpecialRegisters::PC] = pc; 
                 break;
             case BLTZ: // BLTZ (Branch if Less Than Zero)
                 // sign_extended_imm <<= 2;
                 if (id_ex.rs < 0)
                     ex_mem.link_address = id_ex.link_address + id_ex.immediate;
+                    control_unit.pc_src = 1;
                     // special_registers[SpecialRegisters::PC] = pc;
                 break;
             case BGTZ: // BGTZ (Branch if Greater Than Zero)
                 // sign_extended_imm <<= 2;
                 if (id_ex.rs >  0)
                     ex_mem.link_address = id_ex.link_address + id_ex.immediate;
+                    control_unit.pc_src = 1;
                     // special_registers[SpecialRegisters::PC] = pc;
                 break;
             case BLEZ: // BLEZ (Branch if Less Than or Equal to Zero)
                 // sign_extended_imm <<= 2;
                 if (id_ex.rs <= 0)
                     ex_mem.link_address = id_ex.link_address + id_ex.immediate;
+                    control_unit.pc_src = 1;
                     // special_registers[SpecialRegisters::PC] = pc;
                 break;
             case LUI:  // LUI (Load Upper Immediate)
@@ -458,15 +483,21 @@ void CPU::mem(){
     mem_wb.alu_result = ex_mem.alu_result;
     mem_wb.reg_write = ex_mem.reg_write;
     mem_wb.mem_to_reg = ex_mem.mem_to_reg;
+    // *** go over ***
+    // branch pipeline hazard solution
+    if (control_unit.branch == 1){
+        id_ex.branch_rd = mem_wb.alu_result; // Check solution (Solved Problem: wanted value from second instruction has not been written back yet to registers in time for branch comparison) //**probably will need to change not a good solution
+        id_ex.branch_rs = mem_wb.alu_result; 
+        control_unit.branch = 0;
+    }
 
-    // *********
     // if control signal to read from memory is set to 1
     if (ex_mem.mem_read == 1){
         mem_wb.mem_data = memory[ex_mem.alu_result];
     } else if (ex_mem.mem_write == 1){
         memory[ex_mem.alu_result] = ex_mem.store_val; 
     } 
-  
+    
 }
 
 // write back to registers
@@ -669,7 +700,7 @@ bool CPU::decodeExecute(ui32 instruction){
 
 // syscall for pipelined cpu * just switches out A0 reg for ex_mem.arg1 (might be able to remove)
 void CPU::executeSyscall_pipeline(){
-    ui32 syscall_val = ex_mem.syscall_code; // get syscall val from reg V0
+    ui32 syscall_val = id_ex.syscall_code; // get syscall val from reg V0
     switch(syscall_val){
         case PRINT_INT:
             std::cout << ex_mem.arg1 << "\n";
