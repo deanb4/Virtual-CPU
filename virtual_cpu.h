@@ -42,11 +42,14 @@ class CPU{
     private:
         ui32 sp;  // Stack pointer starts at this address 
         ui32 gp;  // Starting address for global variables  
+        size_t cycles;
+        size_t stalled_cycles;
         const ui32 MEMORY_SIZE = (1 << 31); // (2GB)
         // ui32 registers[NUM_REGISTERS]; // Registers
         // ui32 special_registers[NUM_SPECIAL_REGISTERS]; // special registers
         ui32 fp_registers[NUM_FP_REGISTERS]; // floating point registers
         bool halted; 
+        bool dont_set;
         // ui32 pc; // program counter
         Flags flags; // flags for status
         std::unordered_map<i32, std::string> file_descriptors;

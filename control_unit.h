@@ -14,12 +14,17 @@ class ControlUnit{
         uint8_t pc_src;
         uint8_t alu_op;
         uint8_t branch;
+        uint8_t data_hazard_mem_to_mem;
+        uint8_t nop;
+        uint8_t resolved;
+        uint8_t redo_decode;
 
         // constructer
         ControlUnit();
         void setControlSignals(const uint32_t, const uint32_t);
         void forward_control_signals(EX_MEM&);
         void forward_control_signals_mem_wb(EX_MEM&, MEM_WB&);
+        void reset();
 
 };
 

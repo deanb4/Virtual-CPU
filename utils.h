@@ -221,9 +221,63 @@ namespace utils{
         
          // display registers
         return regToStr[reg];
-   
         
     }
+
+    std::string get_opcode(const uint8_t hex_opcode){
+        std::string ret_opcode = "";
+        std::unordered_map<uint8_t, std::string> opcodes{
+            {0x20, "ADD"},
+            {0x22, "SUB"},
+            {0x18, "MULT"},
+            {0x1A, "DIV"},
+            {0x10, "MFHI"},
+            {0x12, "MFLO"},
+            {0x24, "AND"},
+            {0x25, "OR"},
+            {0x26, "XOR"},
+            {0x27, "NOR"},
+            {0x00, "SLL"},
+            {0x02, "SRL"},
+            {0x09, "JALR"},
+            {0x08, "ADDI"},
+            {0x0C, "ANDI"},
+            {0x0D, "ORI"},
+            {0x0E, "XORI"},
+            {0x23, "LW"},
+            {0x2B, "SW"},
+            {0x11, "LB"},
+            {0x21, "LH"},
+            {0x28, "SB"},
+            {0x29, "SH"},
+            {0x04, "BEQ"},
+            {0x05, "BNE"},
+            {0x01, "BGEZ"},
+            {0x07, "BGTZ"},
+            {0x06, "BLEZ"},
+            {0x3C, "BLTZ"},
+            {0x0F, "LUI"},
+            {0x39, "LI"},
+            {0x33, "J"},
+            {0x03, "JAL"},
+            {0x0B, "JR"},
+            {0x3F, "SYSCALL"}
+        };
+
+        if (opcodes.find(hex_opcode) == opcodes.end()){
+            std::cerr << "Invalid Opcode" << std::endl;
+            ret_opcode = "Unkown";
+
+        } else if (hex_opcode == 0x00){
+            ret_opcode = "0";
+        
+        } else
+            ret_opcode = opcodes[hex_opcode];
+        
+        return ret_opcode;
+
+    }
+
 
 
 };

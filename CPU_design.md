@@ -357,8 +357,16 @@ eret        # Return from exception handler
 Forwarding
 Branch Prediction
 stalls
-data hazards
-add display pipeline at every stage to debug method (display it in a graph layout)
+
+#### data hazards:
+mem to mem copy - For loads imm followed by stores save that value from memory to mem_wb register for next cycle. Set control signal to indicate hazard. Add in mem_wb stage: if hazard then use that forwarded result from prev cycle and store that directly in mem. 
+
+hazard detection unit in decode stage that checks if instruction in execution stage is load word instruction with a destination matching one of the operands of the instruction in decode. 
+if (id_ex.memRead and (id_ex.registerRt == if_id.registerRs) or (id-ex.registerRt = if_id.registerRt))
+stall pipeline
+(set control signal to nop): in fetch check for nop instruction and if set to 1 then set instruction equal to: sll $zero, $zero, 0 else proceed normally
+
+
 
 ## **********Error Handeling (Exceptions)
 Memory errors: Add function that checks for valid memory to use before accessing memory at any point. 

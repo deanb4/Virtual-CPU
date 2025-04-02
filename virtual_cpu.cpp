@@ -2,7 +2,7 @@
 
 // Constructor
 CPU::CPU(): memory(new ui32[MEMORY_SIZE]()), registers{0}, special_registers{0},
-            fp_registers{0}, sp(STACK_MEMORY_BOUND), gp(GLOBAL_DATA_MEMORY),pc(TEXT_MEMORY), halted(false){
+            fp_registers{0}, sp(STACK_MEMORY_BOUND), gp(GLOBAL_DATA_MEMORY),pc(TEXT_MEMORY), halted(false), cycles(0), stalled_cycles(0), dont_set(false){
                 // Initializes Memory to 1GB, registers to 0, the sp and gp to respective memory locations,
                 // pc to 0 and halted to false
             registers[Registers::SP] = sp;
@@ -38,26 +38,6 @@ void CPU::fetch(){
     pc++;
     special_registers[SpecialRegisters::PC] = pc;
     decodeExecute(instruction);
-}
-
-// fetch pipeline ** check
-void CPU::fetch_pipeline(){
-    ui32 instruction = memory[pc];
-    // check for branch. If pc src is 1 change pc to jump address and flush if_id and id_ex
-    if (control_unit.pc_src == 1){ 
-        pc = ex_mem.link_address;
-        std::cout << "PC: " << ex_mem.link_address << std::endl; // debug
-        instruction = memory[pc];
-        control_unit.pc_src = 0;
-        if_id.flush();
-        id_ex.flush(); // might need to remove**
-    } else {
-        pc++;
-    }
-    special_registers[SpecialRegisters::PC] = pc;
-    if_id.instruction = instruction;
-    if_id.next_instruction = pc;
-    if_id.link_address = pc; // for branch 
 }
 
 // display registers
@@ -114,6 +94,7 @@ void CPU::debug_pipeline(){
             display_pipeline_registers();
             display_pipeline();
             std::cout << "cycles: " << cycles << "\n";
+            std::cout << "stalled cycles: " << stalled_cycles << "\n";
         } else if (next == 'q'){
             halted = true;
         }
@@ -123,8 +104,8 @@ void CPU::debug_pipeline(){
 
 // display the instructions currently in pipeline and at what stage
 void CPU::display_pipeline(){
-    std::cout << "| " << ((if_id.instruction) >> 26) << " |" <<  "| " << id_ex.opcode << " |" <<
-    "| " << ex_mem.opcode << " |" << "| " << mem_wb.opcode << " |" << "| " << wb_display.opcode << " |" << std::endl;
+    std::cout << "| " << utils::get_opcode(((if_id.instruction) >> 26)) << " |" <<  "| " << utils::get_opcode(id_ex.opcode) << " |" <<
+    "| " << utils::get_opcode(ex_mem.opcode) << " |" << "| " << utils::get_opcode(mem_wb.opcode) << " |" << "| " << utils::get_opcode(wb_display.opcode) << " |" << std::endl;
 }
 
 // display current state of the registers in between each pipeline stage
@@ -168,6 +149,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "alu result: " << mem_wb.alu_result << std::endl;
     std::cout << "destination register: " << mem_wb.destination_register << std::endl;
     std::cout << "memory data: " << mem_wb.mem_data << std::endl;
+    std::cout << "memory data copy: " << mem_wb.mem_data_copy << std::endl;
     std::cout << "--------------------------------------" << std::endl;
     /*
     
@@ -187,9 +169,9 @@ void CPU::run(){
 
 // run pipeline
 void CPU::run_pipeline(){
-    size_t cycles = 0;
-
     while (!halted){
+        if (control_unit.nop == 1)
+            stalled_cycles +=1;
         WB();
         mem();
         execute();
@@ -197,98 +179,177 @@ void CPU::run_pipeline(){
         fetch_pipeline();
         cycles++;
     }
+    std::cout << "cycles: " << cycles << "\n";
+    std::cout << "stalled cycles: " << stalled_cycles << "\n";
+}
+
+// fetch pipeline ** check
+void CPU::fetch_pipeline(){
+    if (control_unit.nop == 0) {
+        ui32 instruction = memory[pc];
+        // check for branch. If pc src is 1 change pc to jump address and flush if_id and id_ex
+        if (control_unit.pc_src == 1){ 
+            pc = ex_mem.link_address;
+            // std::cout << "PC: " << ex_mem.link_address << std::endl; // debug
+            instruction = memory[pc];
+            control_unit.pc_src = 0;
+            if_id.flush();
+            id_ex.flush(); // might need to remove**
+        } else {
+            pc++;
+        }
+        special_registers[SpecialRegisters::PC] = pc;
+        if_id.instruction = instruction;
+        if_id.next_instruction = pc;
+        if_id.link_address = pc; // for branch 
+    }
 }
 
 
 // decode function for pipeline
 // set all control signals here!!!!!!!!!!!!
 void CPU::decode(){
-    // make boolean function
-    ui32 instruction = if_id.instruction; // get instruction from pipeline register
-    ui32 opcode = instruction >> 26;
-    id_ex.link_address = if_id.link_address; // for branch
-    if (opcode == R_TYPE){
-        ui32 rs = instruction >> 21 & 0x1F; // source register
-        ui32 rt = instruction >> 16 & 0x1F;// target register
-        ui32 rd = instruction >> 11 & 0x1F; // destination register
-        ui32 shamt = instruction >> 6 & 0x3F;  // shift amount
-        ui32 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
-
-        // adding to pipeline registers
-        id_ex.opcode = opcode;
-        id_ex.rs = rs;
-        id_ex.rd = rd;
-        id_ex.rt = rt;
-        id_ex.shamt = shamt;
-        id_ex.function_opcode = function_opcode;
-
-        // setting control signals (update to go by instruction)
-        control_unit.setControlSignals(opcode,function_opcode);
-        // move signals to pipeline register 
-        control_unit.forward_control_signals(ex_mem);
-        
-
-    } else if (opcode == J || opcode == JAL){
-        id_ex.opcode = opcode;
-        id_ex.instruction = if_id.instruction; // might need to change
-        // setting control signals
-        control_unit.setControlSignals(opcode);
-        control_unit.forward_control_signals(ex_mem);
-        if (opcode == JAL){
-            // Store return address for JAL (to be written to $ra)
-            id_ex.link_address = ++pc;
+    if (control_unit.nop == 0) {
+        ui32 instruction = 0;
+        size_t current_cycle = 0;
+        if (control_unit.redo_decode == 1){
+            instruction = memory[pc-1];
+            control_unit.redo_decode = 0;
         } else {
-            id_ex.link_address = pc;
+            instruction = if_id.instruction; // get instruction from pipeline register
         }
+        ui32 opcode = instruction >> 26;
+        id_ex.link_address = if_id.link_address; // for branch
+        if (opcode == R_TYPE){
+            ui32 rs = instruction >> 21 & 0x1F; // source register
+            ui32 rt = instruction >> 16 & 0x1F;// target register
+            ui32 rd = instruction >> 11 & 0x1F; // destination register
+            ui32 shamt = instruction >> 6 & 0x3F;  // shift amount
+            ui32 function_opcode = instruction & 0x3F; // extract function code from first 6 bits
 
-    } else if (opcode == SYSCALL){
-        // setting control signals
-        control_unit.setControlSignals(opcode);
-        control_unit.forward_control_signals(ex_mem);
-        id_ex.opcode = opcode;
+            // adding to pipeline registers
+            id_ex.opcode = opcode;
+            id_ex.rs = registers[rs];
+            id_ex.rd = rd;
+            id_ex.rt = registers[rt];
+            id_ex.shamt = shamt;
+            id_ex.function_opcode = function_opcode;
 
-    } else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
-        ui32 rs = instruction >> 21 & 0x1F;
-        ui32 rd = instruction >> 16 & 0x1F;
-        i32 immediate = instruction & 0xFFFF;
-        i32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
-        // if reg V0 (for syscall) just place straight into reg
-        if (rd == V0){
-            id_ex.syscall_code = sign_extended_imm;
+            // data hazard load matching operand stall******** take actual value from reg ** fix
+            ex_mem.rs_copy = registers[rs];
+            ex_mem.rt_copy = registers[rt];
+            ex_mem.rd_copy = rd;
+
+            //  if (control_unit.resolved == 0 && mem_wb.mem_read == 1 && ((if_id.instruction >> 21 & 0x1F) == mem_wb.alu_result) || ((if_id.instruction >> 16 & 0x1F) == mem_wb.alu_result)){
+            // detect stall condition
+            // FIX THIS TRIGGERING WHEN I DONT WANT IT TO *************************************
+            if (id_ex.rs_reg != 0 || id_ex.rd_reg != 0) {
+                if ((control_unit.resolved == 0 && ex_mem.mem_read == 1) && (id_ex.rs_reg == ex_mem.destination_register) || (id_ex.rd_reg == ex_mem.destination_register)){
+                    std::cout << "stall condition triggered" << std::endl;
+                    control_unit.resolved = 1; // not resolved
+                    mem_wb = {}; // might change to id_ex try it
+                    control_unit.nop = 1;
+                    if_id = {};
+                    control_unit.setControlSignals(opcode,function_opcode);
+                    control_unit.reg_write = 1;
+                    control_unit.forward_control_signals(ex_mem);
+                }
+            }
+            // setting control signals (update to go by instruction)
+       
+            control_unit.setControlSignals(opcode,function_opcode);
+            // move signals to pipeline register 
+            control_unit.forward_control_signals(ex_mem);
+            
+    
+
+        } else if (opcode == J || opcode == JAL){
+            id_ex.opcode = opcode;
+            id_ex.instruction = if_id.instruction; // might need to change
+            // setting control signals
+            control_unit.setControlSignals(opcode);
+            control_unit.forward_control_signals(ex_mem);
+            if (opcode == JAL){
+                // Store return address for JAL (to be written to $ra)
+                id_ex.link_address = ++pc;
+            } else {
+                id_ex.link_address = pc;
+            }
+
+        } else if (opcode == SYSCALL){
+            // setting control signals
+            control_unit.setControlSignals(opcode);
+            control_unit.forward_control_signals(ex_mem);
+            id_ex.opcode = opcode;
+
+        } else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
+            ui32 rs = instruction >> 21 & 0x1F;
+            ui32 rd = instruction >> 16 & 0x1F;
+            i32 immediate = instruction & 0xFFFF;
+            i32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
+            // if reg V0 (for syscall) just place straight into reg
+            if (rd == V0){
+                id_ex.syscall_code = sign_extended_imm;
+            }
+            // arguments for syscall
+            switch (rd){
+                case A0:
+                    id_ex.arg1 = sign_extended_imm;
+                    break;
+                case A1:
+                    id_ex.arg2 = sign_extended_imm;
+                    break;
+                case A2:
+                    id_ex.arg3 = sign_extended_imm;
+                    break;
+                case A3:
+                    id_ex.arg4 = sign_extended_imm;
+                    break;
+            }
+            // adding to pipeline registers
+            id_ex.opcode = opcode;
+            id_ex.rs = registers[rs];
+            id_ex.rs_reg = rs;
+            id_ex.rd = registers[rd];
+            id_ex.rd_reg = rd;
+
+            // data hazard mem to mem (worked but not good)
+            // if (control_unit.data_hazard_mem_to_mem == 1){
+            //     id_ex.rd = id_ex.mem_wb_alu_result;
+            // }
+
+            // data hazard load matching operand stall
+            ex_mem.rs_copy = registers[rs];
+            ex_mem.rd_copy = registers[rd];
+
+            
+            //  if (control_unit.resolved == 0 && mem_wb.mem_read == 1 && ((if_id.instruction >> 21 & 0x1F) == mem_wb.alu_result) || ((if_id.instruction >> 16 & 0x1F) == mem_wb.alu_result)){
+            // // detect stall condition
+            // if (id_ex.rs != 0 || id_ex.rd != 0) {
+            //     if (control_unit.resolved == 0 && ex_mem.mem_read == 1 && (id_ex.rs_reg == ex_mem.destination_register) || (id_ex.rd_reg == ex_mem.destination_register)){
+            //         control_unit.nop = 1;
+            //         std::cout << "stall condition triggered" << std::endl;
+            //         control_unit.resolved = 1; // not resolved
+            //         mem_wb = {}; // might change to id_ex try it
+            //         if_id = {};
+            //     }
+            // }
+        
+            // for branch
+            if (opcode == BEQ || opcode == BGEZ || opcode == BGTZ || opcode == BLEZ || opcode == BLTZ){
+                id_ex.branch_rd = rd;
+                id_ex.branch_rs = rs;
+                control_unit.branch = 1;
+            }
+
+            id_ex.immediate = sign_extended_imm;
+
+            // setting control signals
+            control_unit.setControlSignals(opcode);
+            control_unit.forward_control_signals(ex_mem);
         }
-        // arguments for syscall
-        switch (rd){
-            case A0:
-                id_ex.arg1 = sign_extended_imm;
-                break;
-            case A1:
-                id_ex.arg2 = sign_extended_imm;
-                break;
-            case A2:
-                id_ex.arg3 = sign_extended_imm;
-                break;
-            case A3:
-                id_ex.arg4 = sign_extended_imm;
-                break;
-        }
-        // adding to pipeline registers
-        id_ex.opcode = opcode;
-        id_ex.rs = rs;
-        id_ex.rd = rd;
-        // for branch
-        if (opcode == BEQ || opcode == BGEZ || opcode == BGTZ || opcode == BLEZ || opcode == BLTZ){
-            id_ex.branch_rd = rd;
-            id_ex.branch_rs = rs;
-            control_unit.branch = 1;
-        }
-
-        id_ex.immediate = sign_extended_imm;
-
-        // setting control signals
-        control_unit.setControlSignals(opcode);
-        control_unit.forward_control_signals(ex_mem);
-
     }
+
 }
 
 
@@ -297,21 +358,27 @@ void CPU::execute(){
     ui32 jump_address = 0;
     ui32 quotient = 0;
     ui32 remainder = 0;
-    ui32 branch_address = id_ex.link_address; // remove
     ex_mem.opcode = id_ex.opcode;
+    ex_mem.rd = id_ex.rd; // c if its ok here might cause issues ** // forward destination reg ***add for all r type ins (if probalem add for each inst)
+    if (ex_mem.alu_op == 10)
+        ex_mem.destination_register = id_ex.rd;
+    else 
+        ex_mem.destination_register = id_ex.rd_reg;
     if (id_ex.opcode == R_TYPE){
         // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
         switch (id_ex.function_opcode){
             case ADD:
                 ex_mem.alu_result = id_ex.rs + id_ex.rt;
+                flags.setFlags(id_ex.rd,id_ex.rs,id_ex.rt);
                 break;
             case SUB:
                 ex_mem.alu_result = id_ex.rs - id_ex.rt;
+                flags.setFlags(id_ex.rd,id_ex.rs,id_ex.rt);
                 break;
             case MULT: 
                 // rs * rt if rs*rt > 2^32 divide by 2 put half in low and half in high 
                 ex_mem.alu_result = id_ex.rs * id_ex.rt; // mult rd rs rt
-                if (ex_mem.alu_result > (1 << 31)){
+                if (ex_mem.alu_result > (1 << 31)){ // fix
                     ex_mem.store_val = ex_mem.alu_result / 2; // high 
                     ex_mem.store_val2 = ex_mem.alu_result / 2; // low
                 }
@@ -359,7 +426,8 @@ void CPU::execute(){
         switch (id_ex.opcode){
             case J:
                 jump_address = utils::jumpOffsetPipeline(id_ex);
-                ex_mem.jump_address = jump_address;
+                ex_mem.link_address = jump_address;
+                control_unit.pc_src = 1;
                 break;
             // jump and save address of next instruction
             case JAL:
@@ -377,7 +445,7 @@ void CPU::execute(){
             // update for pipeline
             case ADDI: // ADDI $rd, $rs, immediate 
                 ex_mem.alu_result = id_ex.rs + id_ex.immediate;
-                if (id_ex.rs == SP)
+                if (id_ex.rs_reg == SP)
                     registers[SP] += id_ex.immediate;
                 flags.setFlags(id_ex.rs,id_ex.rd, id_ex.immediate);
                 break;
@@ -395,7 +463,12 @@ void CPU::execute(){
                 break;
             case SW:   // (Store Word)
                 ex_mem.alu_result = id_ex.rs + id_ex.immediate;
-                ex_mem.store_val = id_ex.rd;
+                if (control_unit.data_hazard_mem_to_mem == 1){
+                    ex_mem.store_val = mem_wb.mem_data_copy; // for load imm
+                    // std::cout << "this should be 7: " << ex_mem.store_val << "\n"; debug
+                    control_unit.data_hazard_mem_to_mem = 0;
+                } else 
+                    ex_mem.store_val = id_ex.rd;
                 // memory[(registers[rs]) + sign_extended_imm] = registers[rd]; 
                 break;
             case LB:   // (Load Byte) LB $rt, offset($rs)
@@ -408,12 +481,20 @@ void CPU::execute(){
                 break;
             case SB:   // (Store Byte)
                 ex_mem.alu_result = id_ex.rs + id_ex.immediate;
-                ex_mem.store_val = id_ex.rd;
+                if (control_unit.data_hazard_mem_to_mem == 1){
+                    ex_mem.store_val = mem_wb.mem_data_copy;
+                } else 
+                    ex_mem.store_val = id_ex.rd;
                 // memory[rs+sign_extended_imm] = static_cast<ui8>(registers[rd]);
                 break;
             case SH:   // (Store Halfword)
                 ex_mem.alu_result = id_ex.rs + id_ex.immediate;
-                ex_mem.store_val = id_ex.rd;
+                if (control_unit.data_hazard_mem_to_mem == 1){
+                    ex_mem.store_val = mem_wb.mem_data_copy;
+                    // std::cout << "this should be 7: " << "\n"; debug
+                    control_unit.data_hazard_mem_to_mem = 0;
+                } else 
+                    ex_mem.store_val = id_ex.rd;
                 // memory[rs+sign_extended_imm] = static_cast<ui16>(registers[rd]);
                 break;
             case BEQ:  // BEQ $rs, $rt, offset
@@ -464,14 +545,12 @@ void CPU::execute(){
                 break;
             case LI: // load immediate
                 ex_mem.alu_result = id_ex.immediate;
-                ex_mem.destination_register = id_ex.rd;
                 break;
-       }
+        }
     }
 
     // forward control signals from id_ex to ex_mem 
     control_unit.forward_control_signals_mem_wb(ex_mem,mem_wb);
-
 }
 
 // read or write from memory cache
@@ -481,8 +560,22 @@ void CPU::mem(){
     mem_wb.opcode = ex_mem.opcode;
     mem_wb.destination_register = ex_mem.destination_register;
     mem_wb.alu_result = ex_mem.alu_result;
+    mem_wb.store_val = ex_mem.store_val;
+    mem_wb.store_val2 = ex_mem.store_val2;
+    // mem_wb.mem_data_copy = memory[ex_mem.alu_result]; // maybe can remove
+    id_ex.mem_wb_alu_result = mem_wb.alu_result; // forward for data hazard 
+    // std::cout << "mem_wb.alu: " << mem_wb.alu_result << std::endl;
     mem_wb.reg_write = ex_mem.reg_write;
     mem_wb.mem_to_reg = ex_mem.mem_to_reg;
+
+    // mem to mem data hazard: if load immediately followed by a store
+    if ((ex_mem.opcode == LW || ex_mem.opcode == LB || ex_mem.opcode == LH || ex_mem.opcode == LUI || ex_mem.opcode == LI) && 
+        (id_ex.opcode == SW || id_ex.opcode == SB || id_ex.opcode == SH) || ((if_id.instruction >> 26) == SW || (if_id.instruction >> 26) == SB || (if_id.instruction >> 26) == SH)){
+            control_unit.data_hazard_mem_to_mem = 1;
+            wb_display.dont_write = 1;
+            std::cout << "data hazard triggerd" << std::endl; //debug
+        }
+
     // *** go over ***
     // branch pipeline hazard solution
     if (control_unit.branch == 1){
@@ -491,26 +584,50 @@ void CPU::mem(){
         control_unit.branch = 0;
     }
 
-    // if control signal to read from memory is set to 1
-    if (ex_mem.mem_read == 1){
-        mem_wb.mem_data = memory[ex_mem.alu_result];
-    } else if (ex_mem.mem_write == 1){
-        memory[ex_mem.alu_result] = ex_mem.store_val; 
-    } 
     
+    // if control signal to read from memory is set to 1
+    if (mem_wb.mem_read == 1){
+        mem_wb.mem_data = memory[ex_mem.alu_result];
+    } else if (mem_wb.mem_write == 1){
+        memory[ex_mem.alu_result] = mem_wb.store_val; 
+    } 
+
+    // check this (mem to mem hazard i.e. load followed by store)
+    if ((mem_wb.opcode == LI || mem_wb.opcode == LB || mem_wb.opcode == LH || mem_wb.opcode == LUI || 
+        mem_wb.opcode == LW) && control_unit.data_hazard_mem_to_mem == 1){ 
+        mem_wb.mem_data_copy = ex_mem.alu_result; // for imm
+        std::cout << "worked" << "\n";
+    }
 }
 
 // write back to registers
 void CPU::WB(){
     // Take result from memory not alu and store in reg
     wb_display.opcode = mem_wb.opcode; // forward for displaying final stage of pipeline
+    // std::cout << "mem_wb alu result: " <<  mem_wb.alu_result << std::endl;
+    // if stall reset control signal to 1
+    if (control_unit.nop == 1){
+        mem_wb.reg_write = 1;
+    }
     if (mem_wb.reg_write == 1 && mem_wb.mem_to_reg == 1){
         registers[mem_wb.destination_register] = mem_wb.mem_data;
         
-    } else if (mem_wb.reg_write == 1 && mem_wb.mem_to_reg == 0){
+    } else if (mem_wb.reg_write == 1 && mem_wb.mem_to_reg == 0 && wb_display.dont_write == 0){
         registers[mem_wb.destination_register] = mem_wb.alu_result;
     } 
-    
+
+    if (wb_display.opcode == LI && wb_display.dont_write == 1){
+        wb_display.dont_write == 0;
+    } 
+
+    // check if stall is resolved to free pipeline at decode and fetch stages (currently frozen)
+    if (control_unit.nop == 1 && (wb_display.opcode == LI || wb_display.opcode == LUI || wb_display.opcode == LH || wb_display.opcode == LW || wb_display.opcode == LB)){ // might need to use mem_wb opcode instead
+        control_unit.nop = 0;
+        control_unit.resolved = 0;
+        control_unit.redo_decode = 1;
+        std::cout << "stall resolved" << std::endl;
+    } 
+
 }
 
 /****************************************
