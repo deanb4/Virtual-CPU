@@ -244,7 +244,7 @@ void CPU::decode(){
             // detect stall condition
             // FIX THIS TRIGGERING WHEN I DONT WANT IT TO *************************************
             if (id_ex.rs_reg != 0 || id_ex.rd_reg != 0) {
-                if ((control_unit.resolved == 0 && ex_mem.mem_read == 1) && (id_ex.rs_reg == ex_mem.destination_register) || (id_ex.rd_reg == ex_mem.destination_register)){
+                if ((control_unit.resolved == 0 && ex_mem.mem_read == 1) && (if_id.instruction >> 26) != SYSCALL && (id_ex.rs_reg == ex_mem.destination_register) || (id_ex.rd_reg == ex_mem.destination_register)){
                     std::cout << "stall condition triggered" << std::endl;
                     control_unit.resolved = 1; // not resolved
                     mem_wb = {}; // might change to id_ex try it
