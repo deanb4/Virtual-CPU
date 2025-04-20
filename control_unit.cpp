@@ -2,7 +2,7 @@
 
 //constructer
 ControlUnit::ControlUnit(): mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0),
-                            pc_src(0), alu_op(0), branch(0), data_hazard_mem_to_mem(0), nop(0), resolved(0), redo_decode(0){}   
+                            pc_src(0), alu_op(0), branch(0), data_hazard_mem_to_mem(0), nop(0), resolved(0), redo_decode(0), forwardA(0), forwardB(0), exit(0){}   
 
 void ControlUnit::setControlSignals(const uint32_t opcode, const uint32_t function_opcode = 0){
     if (opcode == R_TYPE && (function_opcode == ADD || function_opcode == SUB || function_opcode == AND ||

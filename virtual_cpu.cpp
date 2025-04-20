@@ -8,7 +8,6 @@ CPU::CPU(): memory(new ui32[MEMORY_SIZE]()), registers{0}, special_registers{0},
             registers[Registers::SP] = sp;
             registers[Registers::GP] = gp;
             registers[SpecialRegisters::PC] = pc;
-
 }
 
 
@@ -95,7 +94,7 @@ void CPU::debug_pipeline(){
             display_pipeline();
             std::cout << "cycles: " << cycles << "\n";
             std::cout << "stalled cycles: " << stalled_cycles << "\n";
-        } else if (next == 'q'){
+        } else if (user_input == 'q'){
             halted = true;
         }
     }
@@ -143,6 +142,8 @@ void CPU::display_pipeline_registers(){
     std::cout << "arg2: " << ex_mem.arg2 << std::endl;
     std::cout << "arg3: " << ex_mem.arg3 << std::endl;
     std::cout << "arg4: " << ex_mem.arg4 << std::endl;
+    std::cout << "arg4: " << ex_mem.rs_copy << std::endl;
+    std::cout << "arg4: " << ex_mem.rt_copy << std::endl;
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "MEM_WB REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
@@ -150,6 +151,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "destination register: " << mem_wb.destination_register << std::endl;
     std::cout << "memory data: " << mem_wb.mem_data << std::endl;
     std::cout << "memory data copy: " << mem_wb.mem_data_copy << std::endl;
+    std::cout << "memory data copy1: " << mem_wb.mem_data_copy1 << std::endl;
     std::cout << "--------------------------------------" << std::endl;
     /*
     
@@ -233,7 +235,10 @@ void CPU::decode(){
             id_ex.rd = rd;
             id_ex.rt = registers[rt];
             id_ex.shamt = shamt;
+            id_ex.rs_reg = rs;
+            id_ex.rt_reg = rt;
             id_ex.function_opcode = function_opcode;
+            id_ex.rd_reg = 0;
 
             // data hazard load matching operand stall******** take actual value from reg ** fix
             ex_mem.rs_copy = registers[rs];
@@ -241,22 +246,20 @@ void CPU::decode(){
             ex_mem.rd_copy = rd;
 
             //  if (control_unit.resolved == 0 && mem_wb.mem_read == 1 && ((if_id.instruction >> 21 & 0x1F) == mem_wb.alu_result) || ((if_id.instruction >> 16 & 0x1F) == mem_wb.alu_result)){
-            // detect stall condition
-            // FIX THIS TRIGGERING WHEN I DONT WANT IT TO *************************************
+            // detect stall condition FIXME triggering when not supposed to
             if (id_ex.rs_reg != 0 || id_ex.rd_reg != 0) {
-                if ((control_unit.resolved == 0 && ex_mem.mem_read == 1) && (if_id.instruction >> 26) != SYSCALL && (id_ex.rs_reg == ex_mem.destination_register) || (id_ex.rd_reg == ex_mem.destination_register)){
+                if (control_unit.resolved == 0 && ex_mem.mem_read == 1 && id_ex.opcode != SYSCALL &&  // not when syscall because it would trigger when I didint want to like syscall before addi
+                   (id_ex.rs_reg == ex_mem.destination_register || id_ex.rd_reg == ex_mem.destination_register)){
                     std::cout << "stall condition triggered" << std::endl;
                     control_unit.resolved = 1; // not resolved
                     mem_wb = {}; // might change to id_ex try it
                     control_unit.nop = 1;
                     if_id = {};
-                    control_unit.setControlSignals(opcode,function_opcode);
                     control_unit.reg_write = 1;
-                    control_unit.forward_control_signals(ex_mem);
                 }
             }
+            
             // setting control signals (update to go by instruction)
-       
             control_unit.setControlSignals(opcode,function_opcode);
             // move signals to pipeline register 
             control_unit.forward_control_signals(ex_mem);
@@ -312,29 +315,27 @@ void CPU::decode(){
             id_ex.rs_reg = rs;
             id_ex.rd = registers[rd];
             id_ex.rd_reg = rd;
-
-            // data hazard mem to mem (worked but not good)
-            // if (control_unit.data_hazard_mem_to_mem == 1){
-            //     id_ex.rd = id_ex.mem_wb_alu_result;
-            // }
-
+            id_ex.rt = 0;
+            id_ex.rt_reg = 0;
+            
             // data hazard load matching operand stall
             ex_mem.rs_copy = registers[rs];
             ex_mem.rd_copy = registers[rd];
 
             
-            //  if (control_unit.resolved == 0 && mem_wb.mem_read == 1 && ((if_id.instruction >> 21 & 0x1F) == mem_wb.alu_result) || ((if_id.instruction >> 16 & 0x1F) == mem_wb.alu_result)){
-            // // detect stall condition
-            // if (id_ex.rs != 0 || id_ex.rd != 0) {
-            //     if (control_unit.resolved == 0 && ex_mem.mem_read == 1 && (id_ex.rs_reg == ex_mem.destination_register) || (id_ex.rd_reg == ex_mem.destination_register)){
-            //         control_unit.nop = 1;
-            //         std::cout << "stall condition triggered" << std::endl;
-            //         control_unit.resolved = 1; // not resolved
-            //         mem_wb = {}; // might change to id_ex try it
-            //         if_id = {};
-            //     }
-            // }
-        
+            // detect stall condition ** Check if need here but think I do FIXME triggering when not supposed to
+            if (id_ex.rs_reg != 0 || id_ex.rd_reg != 0) {
+                if (control_unit.resolved == 0 && ex_mem.mem_read == 1 && id_ex.opcode != SYSCALL &&  // not when syscall because it would trigger when I didint want to like syscall before addi
+                   (id_ex.rs_reg == ex_mem.destination_register || id_ex.rd_reg == ex_mem.destination_register)){
+                    std::cout << "stall condition triggered" << std::endl;
+                    control_unit.resolved = 1; // not resolved
+                    mem_wb = {}; // might change to id_ex try it
+                    control_unit.nop = 1;
+                    if_id = {};
+                    control_unit.reg_write = 1;
+                }
+            }
+
             // for branch
             if (opcode == BEQ || opcode == BGEZ || opcode == BGTZ || opcode == BLEZ || opcode == BLTZ){
                 id_ex.branch_rd = rd;
@@ -364,6 +365,24 @@ void CPU::execute(){
         ex_mem.destination_register = id_ex.rd;
     else 
         ex_mem.destination_register = id_ex.rd_reg;
+    // data hazard (calc using value that has not been written back yet)
+    // refactor into switch statement/function
+    if (control_unit.forwardA == 1){
+        id_ex.rs = mem_wb.mem_data_copy;
+        control_unit.forwardA = 0;
+    } else if (control_unit.forwardB == 1){
+        id_ex.rt = mem_wb.mem_data_copy;
+        control_unit.forwardB = 0;
+    }
+
+    if (control_unit.forwardA == 10){
+        id_ex.rs = mem_wb.mem_data_copy1;
+        control_unit.forwardA = 0;
+    } else if (control_unit.forwardB == 10){
+        id_ex.rt = mem_wb.mem_data_copy1;
+        control_unit.forwardB = 0;
+    }
+   
     if (id_ex.opcode == R_TYPE){
         // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
         switch (id_ex.function_opcode){
@@ -375,7 +394,7 @@ void CPU::execute(){
                 ex_mem.alu_result = id_ex.rs - id_ex.rt;
                 flags.setFlags(id_ex.rd,id_ex.rs,id_ex.rt);
                 break;
-            case MULT: 
+            case MULT: // FIXME
                 // rs * rt if rs*rt > 2^32 divide by 2 put half in low and half in high 
                 ex_mem.alu_result = id_ex.rs * id_ex.rt; // mult rd rs rt
                 if (ex_mem.alu_result > (1 << 31)){ // fix
@@ -436,7 +455,8 @@ void CPU::execute(){
                 ex_mem.link_address = id_ex.link_address;
             case SYSCALL: 
                 std::cout << "Executing Syscall" << std::endl; // debug
-                registers[Registers::A0] = id_ex.arg1;
+                // for pipeline but causing issues redo logic for syscalls in pipeline phase
+                // registers[Registers::A0] = id_ex.arg1;
                 registers[Registers::A1] = id_ex.arg2;
                 registers[Registers::A2] = id_ex.arg3;
                 registers[Registers::A3] = id_ex.arg4;
@@ -549,6 +569,20 @@ void CPU::execute(){
         }
     }
 
+    //******data hazard (calculations using a value that has not been written back yet)******
+    // if (ex_mem.reg_write == 1 && ex_mem.destination_register != 0 && ex_mem.destination_register == id_ex.rs_reg){
+    //         control_unit.forwardA = 10;
+    //         ex_mem.rs_copy = ex_mem.alu_result;
+    //         std::cout << "data hazard triggerd1" << std::endl; //debug
+    //         std::cout << "ex_mem_rs_copy: " << ex_mem.rs_copy << std::endl; //debug
+    //     }
+    // else if (ex_mem.reg_write == 1 && ex_mem.destination_register != 0 && ex_mem.destination_register == id_ex.rt_reg){
+    //     control_unit.forwardB = 10;
+    //     ex_mem.rt_copy = ex_mem.alu_result;
+    //     std::cout << "data hazard triggerd2" << std::endl; //debug
+    //     std::cout << "ex_mem_rd_copy: " << ex_mem.rd_copy << std::endl; //debug
+    // }
+    //***************************************************************************************
     // forward control signals from id_ex to ex_mem 
     control_unit.forward_control_signals_mem_wb(ex_mem,mem_wb);
 }
@@ -568,6 +602,21 @@ void CPU::mem(){
     mem_wb.reg_write = ex_mem.reg_write;
     mem_wb.mem_to_reg = ex_mem.mem_to_reg;
 
+    //******data hazard (calculations using a value that has not been written back yet)******
+    if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rs_reg && 
+       mem_wb.destination_register == id_ex.rs_reg){ // FIXME issue here the condition is not right for some reason
+        control_unit.forwardA = 1;
+        mem_wb.mem_data_copy = mem_wb.alu_result;
+        std::cout << "data hazard triggerd mem rs" << std::endl; //debug
+    }
+    else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rt_reg && 
+        mem_wb.destination_register == id_ex.rt_reg){
+         control_unit.forwardB = 1;
+         mem_wb.mem_data_copy = mem_wb.alu_result;
+         std::cout << "data hazard triggerd mem rt" << std::endl; //debug
+     }
+    //***************************************************************************************
+
     // mem to mem data hazard: if load immediately followed by a store
     if ((ex_mem.opcode == LW || ex_mem.opcode == LB || ex_mem.opcode == LH || ex_mem.opcode == LUI || ex_mem.opcode == LI) && 
         (id_ex.opcode == SW || id_ex.opcode == SB || id_ex.opcode == SH) || ((if_id.instruction >> 26) == SW || (if_id.instruction >> 26) == SB || (if_id.instruction >> 26) == SH)){
@@ -585,7 +634,7 @@ void CPU::mem(){
     }
 
     
-    // if control signal to read from memory is set to 1
+    // mem stage main execution 
     if (mem_wb.mem_read == 1){
         mem_wb.mem_data = memory[ex_mem.alu_result];
     } else if (mem_wb.mem_write == 1){
@@ -598,6 +647,7 @@ void CPU::mem(){
         mem_wb.mem_data_copy = ex_mem.alu_result; // for imm
         std::cout << "worked" << "\n";
     }
+
 }
 
 // write back to registers
@@ -621,12 +671,30 @@ void CPU::WB(){
     } 
 
     // check if stall is resolved to free pipeline at decode and fetch stages (currently frozen)
-    if (control_unit.nop == 1 && (wb_display.opcode == LI || wb_display.opcode == LUI || wb_display.opcode == LH || wb_display.opcode == LW || wb_display.opcode == LB)){ // might need to use mem_wb opcode instead
+    if (control_unit.nop == 1 && (wb_display.opcode == LI || wb_display.opcode == LUI || wb_display.opcode == LH || 
+        wb_display.opcode == LW || wb_display.opcode == LB || wb_display.opcode == ADD)){ // might need to use mem_wb opcode instead
         control_unit.nop = 0;
         control_unit.resolved = 0;
         control_unit.redo_decode = 1;
         std::cout << "stall resolved" << std::endl;
     } 
+
+
+    //******data hazard (calculations using a value that has not been written back yet)******
+    if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && mem_wb.destination_register != id_ex.rs_reg && 
+        mem_wb.destination_register == id_ex.rs_reg){
+            control_unit.forwardA = 10;
+            mem_wb.mem_data_copy1 = mem_wb.alu_result;
+            std::cout << "data hazard triggerd wb rs" << std::endl; //debug
+    }
+    else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rt_reg && 
+        mem_wb.destination_register == id_ex.rt_reg){
+        control_unit.forwardB = 10;
+        mem_wb.mem_data_copy1 = mem_wb.alu_result;
+        std::cout << "data hazard triggerd wb rt" << std::endl; //debug
+        std::cout << "mem wb copy data 1: " << mem_wb.mem_data_copy1 << std::endl; //debug
+    }
+    //***************************************************************************************
 
 }
 
@@ -921,9 +989,9 @@ void CPU::executeSyscall(){
             halted = true;
             break;
         }
-        case EXIT_STATUS: {
-            ui32 exit_status = registers[Registers::A0];
-            std::cerr << "Program exited with status: " << exit_status << "\n";
+        case EXIT_STATUS: { // need to fix this 
+            ui32 exit_status = special_registers[SpecialRegisters::EPC];
+            std::cerr << "Program exited with status: " <<  exit_status << "\n";
             halted = true;
             break;
         }

@@ -48,7 +48,7 @@ namespace utils{
     ui32 sign_extend(const ui16& imm){
         ui32 sign_extended_imm = imm;
         if (imm & 0x8000) // if negative (16th bit 1)
-            sign_extended_imm |= 0xFFFF0000; //trailiong 1's (-)
+            sign_extended_imm |= 0xFFFF0000; // trailing 1's (-)
         else 
             sign_extended_imm &= 0x0000FFFF; // sign extend trailing 0's (+)
         

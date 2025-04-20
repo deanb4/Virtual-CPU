@@ -37,6 +37,7 @@ struct ID_EX {
     uint32_t arg1, arg2, arg3, arg4;
     uint32_t rs_reg;
     uint32_t rd_reg;
+    uint32_t rt_reg;
     uint32_t mem_wb_alu_result;
     
     // Add control signals
@@ -51,7 +52,7 @@ struct ID_EX {
     ID_EX(): opcode(0), instruction(0), rs(0), branch_rs(0), rt(0), rd(0), branch_rd(0), immediate(0), shamt(0),
             function_opcode(0), jump_address(0), syscall_code(0), link_address(0),
             mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0),
-            arg1(0), arg2(0), arg3(0), arg4(0), rs_reg(0), rd_reg(0), mem_wb_alu_result(0), alu_op(0){}
+            arg1(0), arg2(0), arg3(0), arg4(0), rs_reg(0), rd_reg(0), rt_reg(0), mem_wb_alu_result(0), alu_op(0){}
 
     void flush(){
         opcode = 0;
@@ -115,6 +116,7 @@ struct MEM_WB {
     uint32_t destination_register; 
     int32_t mem_data; 
     int32_t mem_data_copy; 
+    int32_t mem_data_copy1; 
     int32_t store_val;
     int32_t store_val2;
     
@@ -125,7 +127,7 @@ struct MEM_WB {
     uint8_t mem_read;      // MemRead
     uint8_t mem_write;     // MemWrite
 
-    MEM_WB(): opcode(0), alu_result(0), destination_register(0), mem_data(0), mem_data_copy(0), reg_write(0),  mem_to_reg(0), store_val(0), store_val2(0),
+    MEM_WB(): opcode(0), alu_result(0), destination_register(0), mem_data(0), mem_data_copy(0), mem_data_copy1(0), reg_write(0),  mem_to_reg(0), store_val(0), store_val2(0),
               mem_read(0), mem_write(0), alu_op(0){}
 };
 
