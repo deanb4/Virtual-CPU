@@ -30,6 +30,8 @@
 #define i32 int32_t
 #define ui8 uint8_t
 #define ui16 uint16_t
+#define DEBUG 0
+#define PERF 0
 
 // ***** UPDATES *****
 // create function that handles exception: takes flags check if exeption flag is true

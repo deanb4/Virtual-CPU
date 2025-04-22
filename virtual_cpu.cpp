@@ -33,7 +33,7 @@ void CPU::loadProgram(const std::vector<ui32>& program){
 // Fetch Instruction from memory and pass to decodeExecute
 void CPU::fetch(){
     ui32 instruction = memory[pc];
-    std::cout << "PC: " << pc << std::endl;
+    // std::cout << "PC: " << pc << std::endl;
     pc++;
     special_registers[SpecialRegisters::PC] = pc;
     decodeExecute(instruction);
@@ -92,8 +92,12 @@ void CPU::debug_pipeline(){
             display_general_registers();
             display_pipeline_registers();
             display_pipeline();
-            std::cout << "cycles: " << cycles << "\n";
-            std::cout << "stalled cycles: " << stalled_cycles << "\n";
+            
+            if (PERF){
+                std::cout << "cycles: " << cycles << "\n";
+                std::cout << "stalled cycles: " << stalled_cycles << "\n";
+            }
+
         } else if (user_input == 'q'){
             halted = true;
         }
@@ -117,6 +121,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "ID_EX REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
+    std::cout << "opcode: " << utils::get_opcode(id_ex.opcode) << std::endl;
     std::cout << "opcode: " << id_ex.opcode << std::endl;
     std::cout << "instruction: " << id_ex.instruction << std::endl;
     std::cout << "rs: " << id_ex.rs << std::endl;
@@ -131,6 +136,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "EX_MEM REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
+    std::cout << "opcode: " << utils::get_opcode(ex_mem.opcode) << std::endl;
     std::cout << "alu result: " << ex_mem.alu_result << std::endl;
     std::cout << "store val: " << ex_mem.store_val << std::endl;
     std::cout << "store val2: " << ex_mem.store_val2 << std::endl;
@@ -147,19 +153,13 @@ void CPU::display_pipeline_registers(){
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "MEM_WB REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
+    std::cout << "opcode: " << utils::get_opcode(mem_wb.opcode) << std::endl;
     std::cout << "alu result: " << mem_wb.alu_result << std::endl;
     std::cout << "destination register: " << mem_wb.destination_register << std::endl;
     std::cout << "memory data: " << mem_wb.mem_data << std::endl;
     std::cout << "memory data copy: " << mem_wb.mem_data_copy << std::endl;
     std::cout << "memory data copy1: " << mem_wb.mem_data_copy1 << std::endl;
     std::cout << "--------------------------------------" << std::endl;
-    /*
-    
-        uint32_t alu_result;
-    uint32_t destination_register; 
-    uint32_t mem_data; 
-
-    */
 }
 
 // run cpu
@@ -181,8 +181,11 @@ void CPU::run_pipeline(){
         fetch_pipeline();
         cycles++;
     }
-    std::cout << "cycles: " << cycles << "\n";
-    std::cout << "stalled cycles: " << stalled_cycles << "\n";
+
+    if (PERF){
+        std::cout << "cycles: " << cycles << "\n";
+        std::cout << "stalled cycles: " << stalled_cycles << "\n";
+    }
 }
 
 // fetch pipeline ** check
@@ -285,6 +288,40 @@ void CPU::decode(){
             control_unit.forward_control_signals(ex_mem);
             id_ex.opcode = opcode;
 
+            if (ex_mem.opcode == LUI || ex_mem.opcode == ORI){
+                switch(ex_mem.rd){
+                    case A0:
+                        registers[Registers::A0] = ex_mem.alu_result;
+                        break;
+                    case A1:
+                        registers[Registers::A0] = ex_mem.alu_result;
+                        break;
+                    case A2:
+                        registers[Registers::A0] = ex_mem.alu_result;
+                        break;
+                    case A3:
+                        registers[Registers::A0] = ex_mem.alu_result;
+                        break;
+                }
+            }
+            
+            if (mem_wb.opcode == LUI || mem_wb.opcode == ORI){
+                switch(mem_wb.destination_register){
+                    case A0:
+                        registers[Registers::A0] = mem_wb.alu_result;
+                        break;
+                    case A1:
+                        registers[Registers::A0] = mem_wb.alu_result;
+                        break;
+                    case A2:
+                        registers[Registers::A0] = mem_wb.alu_result;
+                        break;
+                    case A3:
+                        registers[Registers::A0] = mem_wb.alu_result;
+                        break;
+                }
+            }
+
         } else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
             ui32 rs = instruction >> 21 & 0x1F;
             ui32 rd = instruction >> 16 & 0x1F;
@@ -338,9 +375,13 @@ void CPU::decode(){
 
             // for branch
             if (opcode == BEQ || opcode == BGEZ || opcode == BGTZ || opcode == BLEZ || opcode == BLTZ){
-                id_ex.branch_rd = rd;
-                id_ex.branch_rs = rs;
+                id_ex.branch_rd_reg = rd; // branch reg
+                id_ex.branch_rs_reg = rs;
                 control_unit.branch = 1;
+
+                // FIXME: move these to be with addi or li instead for better perf
+                id_ex.branch_compare_1 = ex_mem.alu_result;
+                id_ex.branch_compare_2 = mem_wb.alu_result;
             }
 
             id_ex.immediate = sign_extended_imm;
@@ -454,9 +495,10 @@ void CPU::execute(){
                 ex_mem.jump_address = jump_address;
                 ex_mem.link_address = id_ex.link_address;
             case SYSCALL: 
-                std::cout << "Executing Syscall" << std::endl; // debug
+                if (DEBUG)
+                    std::cout << "Executing Syscall" << std::endl; // debug
                 // for pipeline but causing issues redo logic for syscalls in pipeline phase
-                // registers[Registers::A0] = id_ex.arg1;
+                registers[Registers::A0] = id_ex.arg1;
                 registers[Registers::A1] = id_ex.arg2;
                 registers[Registers::A2] = id_ex.arg3;
                 registers[Registers::A3] = id_ex.arg4;
@@ -518,7 +560,9 @@ void CPU::execute(){
                 // memory[rs+sign_extended_imm] = static_cast<ui16>(registers[rd]);
                 break;
             case BEQ:  // BEQ $rs, $rt, offset
-                if (registers[id_ex.rs] == id_ex.branch_rd || registers[id_ex.rd] == id_ex.branch_rs){ // need to check but should work
+                registers[mem_wb.destination_register] = mem_wb.alu_result;
+                if (id_ex.branch_compare_1 == id_ex.branch_compare_2 && (registers[id_ex.rs] == id_ex.branch_rd || registers[id_ex.rd] == id_ex.branch_rs ||
+                    registers[mem_wb.destination_register] == id_ex.branch_rd)){ // need to check but should work
                     ex_mem.link_address = id_ex.link_address + id_ex.immediate; // forward new pc (change)
                     control_unit.pc_src = 1;
                 }
@@ -607,13 +651,14 @@ void CPU::mem(){
        mem_wb.destination_register == id_ex.rs_reg){ // FIXME issue here the condition is not right for some reason
         control_unit.forwardA = 1;
         mem_wb.mem_data_copy = mem_wb.alu_result;
-        std::cout << "data hazard triggerd mem rs" << std::endl; //debug
+        // std::cout << "data hazard triggerd mem rs" << std::endl; //debug
     }
     else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rt_reg && 
         mem_wb.destination_register == id_ex.rt_reg){
          control_unit.forwardB = 1;
          mem_wb.mem_data_copy = mem_wb.alu_result;
-         std::cout << "data hazard triggerd mem rt" << std::endl; //debug
+         if (DEBUG)
+            std::cout << "data hazard triggerd mem rt" << std::endl; //debug
      }
     //***************************************************************************************
 
@@ -622,7 +667,8 @@ void CPU::mem(){
         (id_ex.opcode == SW || id_ex.opcode == SB || id_ex.opcode == SH) || ((if_id.instruction >> 26) == SW || (if_id.instruction >> 26) == SB || (if_id.instruction >> 26) == SH)){
             control_unit.data_hazard_mem_to_mem = 1;
             wb_display.dont_write = 1;
-            std::cout << "data hazard triggerd" << std::endl; //debug
+            if (DEBUG)
+                std::cout << "data hazard triggerd" << std::endl; //debug
         }
 
     // *** go over ***
@@ -645,7 +691,6 @@ void CPU::mem(){
     if ((mem_wb.opcode == LI || mem_wb.opcode == LB || mem_wb.opcode == LH || mem_wb.opcode == LUI || 
         mem_wb.opcode == LW) && control_unit.data_hazard_mem_to_mem == 1){ 
         mem_wb.mem_data_copy = ex_mem.alu_result; // for imm
-        std::cout << "worked" << "\n";
     }
 
 }
@@ -685,14 +730,17 @@ void CPU::WB(){
         mem_wb.destination_register == id_ex.rs_reg){
             control_unit.forwardA = 10;
             mem_wb.mem_data_copy1 = mem_wb.alu_result;
-            std::cout << "data hazard triggerd wb rs" << std::endl; //debug
+            if (DEBUG)
+                std::cout << "data hazard triggerd wb rs" << std::endl; //debug
     }
     else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rt_reg && 
         mem_wb.destination_register == id_ex.rt_reg){
         control_unit.forwardB = 10;
         mem_wb.mem_data_copy1 = mem_wb.alu_result;
-        std::cout << "data hazard triggerd wb rt" << std::endl; //debug
-        std::cout << "mem wb copy data 1: " << mem_wb.mem_data_copy1 << std::endl; //debug
+        if (DEBUG){
+            std::cout << "data hazard triggerd wb rt" << std::endl; //debug
+            std::cout << "mem wb copy data 1: " << mem_wb.mem_data_copy1 << std::endl; //debug
+        }
     }
     //***************************************************************************************
 
@@ -788,7 +836,8 @@ bool CPU::decodeExecute(ui32 instruction){
         registers[Registers::RA] = ++pc; // save address of next instruction (to return to)
         utils::jumpOffset(instruction,pc); // set pc to target address
     }else if (opcode == SYSCALL){
-        std::cout <<"executing syscall" << std::endl;
+        if (DEBUG)
+            std::cout <<"executing syscall" << std::endl;
         executeSyscall(); // execute syscalls
     }
     

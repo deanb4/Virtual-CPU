@@ -25,9 +25,11 @@ struct ID_EX {
     uint32_t instruction;
     uint32_t rs;
     uint32_t branch_rs;
+    uint32_t branch_rs_reg;
     uint32_t rt;
     uint32_t rd;
     uint32_t branch_rd;
+    uint32_t branch_rd_reg;
     uint32_t immediate;
     uint32_t shamt;
     uint32_t function_opcode;
@@ -39,6 +41,8 @@ struct ID_EX {
     uint32_t rd_reg;
     uint32_t rt_reg;
     uint32_t mem_wb_alu_result;
+    uint32_t branch_compare_1;
+    uint32_t branch_compare_2;
     
     // Add control signals
     uint32_t alu_op;
@@ -52,7 +56,8 @@ struct ID_EX {
     ID_EX(): opcode(0), instruction(0), rs(0), branch_rs(0), rt(0), rd(0), branch_rd(0), immediate(0), shamt(0),
             function_opcode(0), jump_address(0), syscall_code(0), link_address(0),
             mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0),
-            arg1(0), arg2(0), arg3(0), arg4(0), rs_reg(0), rd_reg(0), rt_reg(0), mem_wb_alu_result(0), alu_op(0){}
+            arg1(0), arg2(0), arg3(0), arg4(0), rs_reg(0), rd_reg(0), rt_reg(0), mem_wb_alu_result(0), alu_op(0), branch_rs_reg(0), branch_rd_reg(0),
+            branch_compare_1(0), branch_compare_2(0){}
 
     void flush(){
         opcode = 0;
