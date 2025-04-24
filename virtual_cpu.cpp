@@ -90,6 +90,7 @@ void CPU::debug_pipeline(){
             cycles++;
             // display registers and pipeline
             display_general_registers();
+            display_memory(STACK_MEMORY_BOUND-10,STACK_MEMORY_BOUND);
             display_pipeline_registers();
             display_pipeline();
             
@@ -159,6 +160,8 @@ void CPU::display_pipeline_registers(){
     std::cout << "memory data: " << mem_wb.mem_data << std::endl;
     std::cout << "memory data copy: " << mem_wb.mem_data_copy << std::endl;
     std::cout << "memory data copy1: " << mem_wb.mem_data_copy1 << std::endl;
+    std::cout << "store value: " << mem_wb.store_val << std::endl;
+    std::cout << "store value2: " << mem_wb.store_val2 << std::endl;
     std::cout << "--------------------------------------" << std::endl;
 }
 
@@ -324,7 +327,8 @@ void CPU::decode(){
 
         } else if (opcode != J && opcode!= JAL && opcode != R_TYPE && opcode != SYSCALL){
             ui32 rs = instruction >> 21 & 0x1F;
-            ui32 rd = instruction >> 16 & 0x1F;
+            ui32 rd = instruction >> 16 & 0x1F; // rt if SW *FIXME opcode | rs | rt | immediate (SW) rt (value to be stored)
+            ui32 rt = instruction >> 16 & 0x1F; // for Stores  FIXME might not need ? but better approach
             i32 immediate = instruction & 0xFFFF;
             i32 sign_extended_imm = utils::sign_extend(immediate); // utility function to sign extend
             // if reg V0 (for syscall) just place straight into reg
@@ -401,6 +405,7 @@ void CPU::execute(){
     ui32 quotient = 0;
     ui32 remainder = 0;
     ex_mem.opcode = id_ex.opcode;
+    ex_mem.rs_reg = id_ex.rs_reg;
     ex_mem.rd = id_ex.rd; // c if its ok here might cause issues ** // forward destination reg ***add for all r type ins (if probalem add for each inst)
     if (ex_mem.alu_op == 10)
         ex_mem.destination_register = id_ex.rd;
@@ -660,16 +665,26 @@ void CPU::mem(){
          if (DEBUG)
             std::cout << "data hazard triggerd mem rt" << std::endl; //debug
      }
+
+     if (control_unit.forwardA == 10){
+        control_unit.forwardA = 0;
+        ex_mem.alu_result = mem_wb.mem_data_copy1;
+     }
+         
     //***************************************************************************************
 
     // mem to mem data hazard: if load immediately followed by a store
-    if ((ex_mem.opcode == LW || ex_mem.opcode == LB || ex_mem.opcode == LH || ex_mem.opcode == LUI || ex_mem.opcode == LI) && 
-        (id_ex.opcode == SW || id_ex.opcode == SB || id_ex.opcode == SH) || ((if_id.instruction >> 26) == SW || (if_id.instruction >> 26) == SB || (if_id.instruction >> 26) == SH)){
-            control_unit.data_hazard_mem_to_mem = 1;
-            wb_display.dont_write = 1;
+    if (ex_mem.opcode == LW || ex_mem.opcode == LB || ex_mem.opcode == LH || ex_mem.opcode == LUI || ex_mem.opcode == LI){
+        if ((id_ex.opcode == SW || id_ex.opcode == SB || id_ex.opcode == SH) || ((if_id.instruction >> 26) == SW || (if_id.instruction >> 26) == SB || (if_id.instruction >> 26) == SH)){
+            // quick fix get rid of PROBLEM CURRENT FIX 4/22 FIXME
+            if(id_ex.opcode != ADDI && id_ex.rd != SP){ 
+                control_unit.data_hazard_mem_to_mem = 1;
+                wb_display.dont_write = 1;
+            }
             if (DEBUG)
                 std::cout << "data hazard triggerd" << std::endl; //debug
         }
+    }
 
     // *** go over ***
     // branch pipeline hazard solution
@@ -684,7 +699,7 @@ void CPU::mem(){
     if (mem_wb.mem_read == 1){
         mem_wb.mem_data = memory[ex_mem.alu_result];
     } else if (mem_wb.mem_write == 1){
-        memory[ex_mem.alu_result] = mem_wb.store_val; 
+        memory[ex_mem.alu_result] = mem_wb.store_val; // sw issue
     } 
 
     // check this (mem to mem hazard i.e. load followed by store)
@@ -741,6 +756,20 @@ void CPU::WB(){
             std::cout << "data hazard triggerd wb rt" << std::endl; //debug
             std::cout << "mem wb copy data 1: " << mem_wb.mem_data_copy1 << std::endl; //debug
         }
+    }
+
+    if (mem_wb.mem_write == 1 && mem_wb.destination_register == ex_mem.rs_reg){
+        control_unit.forwardA = 10;
+        mem_wb.mem_data_copy1 = mem_wb.alu_result;
+    }
+
+    // integrate into above code 
+    if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rs_reg){
+        control_unit.forwardA = 10;
+        mem_wb.mem_data_copy1 = mem_wb.alu_result;
+    } else if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rt_reg){
+        control_unit.forwardB = 10;
+        mem_wb.mem_data_copy1 = mem_wb.alu_result;
     }
     //***************************************************************************************
 

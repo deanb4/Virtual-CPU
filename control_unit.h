@@ -28,6 +28,7 @@ class ControlUnit{
         void forward_control_signals(EX_MEM&);
         void forward_control_signals_mem_wb(EX_MEM&, MEM_WB&);
         void reset();
+        void reset_ex_mem(EX_MEM&);
 
 };
 

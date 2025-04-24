@@ -42,7 +42,7 @@ void ControlUnit::setControlSignals(const uint32_t opcode, const uint32_t functi
             branch = 1; // might change to jump
 
     } else if (opcode == SB || opcode == SH || opcode == SW) {
-            mem_write =1;
+            mem_write = 1;
             alu_src = 1;
 
     } else if (opcode == LW || opcode == LB || opcode == LH) {
@@ -67,6 +67,7 @@ void ControlUnit::forward_control_signals(EX_MEM& ex_mem) {
     ex_mem.mem_read = mem_read;
     ex_mem.reg_dst = reg_dst;
     ex_mem.alu_op = alu_op;
+    reset();
 }
 
 void ControlUnit::forward_control_signals_mem_wb(EX_MEM& ex_mem, MEM_WB& mem_wb) {
@@ -76,6 +77,7 @@ void ControlUnit::forward_control_signals_mem_wb(EX_MEM& ex_mem, MEM_WB& mem_wb)
     mem_wb.mem_read = ex_mem.mem_read;
     mem_wb.mem_write = ex_mem.mem_write;
     mem_wb.alu_op = ex_mem.alu_op;
+    reset_ex_mem(ex_mem);
 }
 
 
@@ -91,4 +93,12 @@ void ControlUnit::reset(){
     branch = 0;
     data_hazard_mem_to_mem = 0;
     nop = 0;
+}
+
+void ControlUnit::reset_ex_mem(EX_MEM& ex_mem){
+        ex_mem.reg_write = 0;
+        ex_mem.mem_to_reg = 0;
+        ex_mem.mem_read = 0;
+        ex_mem.mem_write = 0;
+        ex_mem.alu_op = 0;
 }
