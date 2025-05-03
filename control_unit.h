@@ -17,6 +17,7 @@ class ControlUnit{
         uint8_t data_hazard_mem_to_mem;
         uint8_t forwardA;
         uint8_t forwardB;
+        uint8_t forwardC;
         uint8_t nop;
         uint8_t resolved;
         uint8_t redo_decode;

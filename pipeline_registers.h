@@ -100,6 +100,7 @@ struct EX_MEM {
     uint32_t rs_reg;
     uint32_t rd_reg;
     uint32_t rt_reg;
+    uint32_t function_opcode;
     
     
     // Add control signals
@@ -114,7 +115,7 @@ struct EX_MEM {
     EX_MEM(): opcode(0), alu_result(0), store_val(0), store_val2(0), destination_register(0), 
               jump_address(0), link_address(0), syscall_code(0), arg1(0), arg2(0), arg3(0),
               arg4(0), mem_read(0), mem_write(0), reg_write(0), mem_to_reg(0), alu_src(0), reg_dst(0),
-              rs(0), rt(0), rd(0), rs_copy(0), rt_copy(0), rd_copy(0), alu_op(0), rs_reg(0),rt_reg(0), rd_reg(0){}
+              rs(0), rt(0), rd(0), rs_copy(0), rt_copy(0), rd_copy(0), alu_op(0), rs_reg(0),rt_reg(0), rd_reg(0), function_opcode(0){}
 };
 
 // MEM/WB Register (Between MEM & WB)
@@ -130,6 +131,7 @@ struct MEM_WB {
     uint32_t rs_reg;
     uint32_t rd_reg;
     uint32_t rt_reg;
+    uint32_t function_opcode;
     
     
     // Add control signals
@@ -140,7 +142,7 @@ struct MEM_WB {
     uint8_t mem_write;     // MemWrite
 
     MEM_WB(): opcode(0), alu_result(0), destination_register(0), mem_data(0), mem_data_copy(0), mem_data_copy1(0), reg_write(0),  mem_to_reg(0), store_val(0), store_val2(0),
-              mem_read(0), mem_write(0), alu_op(0), rs_reg(0), rt_reg(0), rd_reg(0){}
+              mem_read(0), mem_write(0), alu_op(0), rs_reg(0), rt_reg(0), rd_reg(0),function_opcode(0){}
 };
 
 
@@ -148,7 +150,8 @@ struct MEM_WB {
 struct Wb_display {
     uint32_t opcode;
     uint32_t dont_write;
-    Wb_display(): opcode(0),dont_write(0){}
+    uint32_t function_opcode;
+    Wb_display(): opcode(0),dont_write(0), function_opcode(0){}
 };
 
 #endif

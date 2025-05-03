@@ -108,8 +108,8 @@ void CPU::debug_pipeline(){
 
 // display the instructions currently in pipeline and at what stage
 void CPU::display_pipeline(){
-    std::cout << "| " << utils::get_opcode(((if_id.instruction) >> 26)) << " |" <<  "| " << utils::get_opcode(id_ex.opcode) << " |" <<
-    "| " << utils::get_opcode(ex_mem.opcode) << " |" << "| " << utils::get_opcode(mem_wb.opcode) << " |" << "| " << utils::get_opcode(wb_display.opcode) << " |" << std::endl;
+    std::cout << "| IF: " << utils::get_opcode(((if_id.instruction) >> 26), (if_id.instruction & 0x3F)) << " |" << " -> " <<  "| ID: " << utils::get_opcode(id_ex.opcode, id_ex.function_opcode) << " |" << " -> "  <<
+    "| EX: " << utils::get_opcode(ex_mem.opcode, ex_mem.function_opcode) << " |" << " -> " << "| MEM: " << utils::get_opcode(mem_wb.opcode, mem_wb.function_opcode) << " |" << " -> " << "| WB: " << utils::get_opcode(wb_display.opcode, wb_display.function_opcode) << " |" << std::endl;
 }
 
 // display current state of the registers in between each pipeline stage
@@ -122,7 +122,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "ID_EX REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
-    std::cout << "opcode: " << utils::get_opcode(id_ex.opcode) << std::endl;
+    std::cout << "opcode: " << utils::get_opcode(id_ex.opcode, id_ex.function_opcode) << std::endl;
     std::cout << "opcode: " << id_ex.opcode << std::endl;
     std::cout << "instruction: " << id_ex.instruction << std::endl;
     std::cout << "rs: " << id_ex.rs << std::endl;
@@ -137,7 +137,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "EX_MEM REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
-    std::cout << "opcode: " << utils::get_opcode(ex_mem.opcode) << std::endl;
+    std::cout << "opcode: " << utils::get_opcode(ex_mem.opcode, ex_mem.function_opcode) << std::endl;
     std::cout << "alu result: " << ex_mem.alu_result << std::endl;
     std::cout << "store val: " << ex_mem.store_val << std::endl;
     std::cout << "store val2: " << ex_mem.store_val2 << std::endl;
@@ -148,13 +148,10 @@ void CPU::display_pipeline_registers(){
     std::cout << "arg1: " << ex_mem.arg1 << std::endl;
     std::cout << "arg2: " << ex_mem.arg2 << std::endl;
     std::cout << "arg3: " << ex_mem.arg3 << std::endl;
-    std::cout << "arg4: " << ex_mem.arg4 << std::endl;
-    std::cout << "arg4: " << ex_mem.rs_copy << std::endl;
-    std::cout << "arg4: " << ex_mem.rt_copy << std::endl;
     std::cout << "--------------------------------------" << std::endl;
     std::cout << "MEM_WB REGISTER: " << std::endl;
     std::cout << "--------------------------------------" << std::endl;
-    std::cout << "opcode: " << utils::get_opcode(mem_wb.opcode) << std::endl;
+    std::cout << "opcode: " << utils::get_opcode(mem_wb.opcode,mem_wb.function_opcode) << std::endl;
     std::cout << "alu result: " << mem_wb.alu_result << std::endl;
     std::cout << "destination register: " << mem_wb.destination_register << std::endl;
     std::cout << "memory data: " << mem_wb.mem_data << std::endl;
@@ -164,6 +161,7 @@ void CPU::display_pipeline_registers(){
     std::cout << "store value2: " << mem_wb.store_val2 << std::endl;
     std::cout << "--------------------------------------" << std::endl;
 }
+
 
 // run cpu
 void CPU::run(){
@@ -404,9 +402,9 @@ void CPU::execute(){
     ui32 jump_address = 0;
     ui32 quotient = 0;
     ui32 remainder = 0;
+    ex_mem.function_opcode = id_ex.function_opcode;
     ex_mem.opcode = id_ex.opcode;
     ex_mem.rs_reg = id_ex.rs_reg;
-    ex_mem.rd = id_ex.rd; // c if its ok here might cause issues ** // forward destination reg ***add for all r type ins (if probalem add for each inst)
     if (ex_mem.alu_op == 10)
         ex_mem.destination_register = id_ex.rd;
     else 
@@ -416,19 +414,39 @@ void CPU::execute(){
     if (control_unit.forwardA == 1){
         id_ex.rs = mem_wb.mem_data_copy;
         control_unit.forwardA = 0;
-    } else if (control_unit.forwardB == 1){
-        id_ex.rt = mem_wb.mem_data_copy;
+    } 
+    if (control_unit.forwardB == 1){
+        if (ex_mem.opcode == SW){
+            id_ex.rd = mem_wb.mem_data_copy;
+        } else {
+            id_ex.rt = mem_wb.mem_data_copy;
+        }
         control_unit.forwardB = 0;
     }
 
     if (control_unit.forwardA == 10){
         id_ex.rs = mem_wb.mem_data_copy1;
         control_unit.forwardA = 0;
-    } else if (control_unit.forwardB == 10){
-        id_ex.rt = mem_wb.mem_data_copy1;
+    } 
+    if (control_unit.forwardB == 10){
+        if (ex_mem.opcode == SW){
+            id_ex.rd = mem_wb.mem_data_copy1;
+        } else {
+            id_ex.rt = mem_wb.mem_data_copy1;
+        }
         control_unit.forwardB = 0;
     }
-   
+    // if (control_unit.forwardC = 5){
+    //     id_ex.rt = mem_wb.mem_data_copy1;
+    //     control_unit.forwardC = 0;
+    // }
+    ex_mem.rd = id_ex.rd; // c if its ok here might cause issues ** // forward destination reg ***add for all r type ins (if probalem add for each inst)
+
+    // check if registers are equal (WARNING: might need to place in forwarding logic above)
+    if (id_ex.rs_reg == id_ex.rt_reg){
+        id_ex.rt = id_ex.rs;
+    }
+
     if (id_ex.opcode == R_TYPE){
         // |Opcode| |rs| |rt| |rd| |shamt| |opcode| Bits: (6,5,5,5,5,6)
         switch (id_ex.function_opcode){
@@ -640,6 +658,7 @@ void CPU::execute(){
 // ************add syscall execute functionality****************
 void CPU::mem(){
     // forward to final pipeline register stage
+    mem_wb.function_opcode = ex_mem.function_opcode;
     mem_wb.opcode = ex_mem.opcode;
     mem_wb.destination_register = ex_mem.destination_register;
     mem_wb.alu_result = ex_mem.alu_result;
@@ -651,30 +670,69 @@ void CPU::mem(){
     mem_wb.reg_write = ex_mem.reg_write;
     mem_wb.mem_to_reg = ex_mem.mem_to_reg;
 
+    // forward result from wb stage to store in mem
+    // if (control_unit.forwardC == 5 && mem_wb.alu_result < SP){
+    //     mem_wb.store_val = mem_wb.mem_data_copy1;
+    //     control_unit.forwardC = 0;
+    // }
+
+    // Solving Sw and stack test program but creating issues with addi ,adddi ,sub program
+    mem_wb.mem_to_reg = ex_mem.mem_to_reg;
+    if (control_unit.forwardB == 10 && mem_wb.alu_result < SP){
+        mem_wb.store_val = mem_wb.mem_data_copy1;
+        // control_unit.forwardB = 0; Warning: quick fix that could cause issues when uncommented it makes sw and stack test succeed but the data hazard test fail
+    }
+
     //******data hazard (calculations using a value that has not been written back yet)******
-    if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rs_reg && 
+    if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && 
        mem_wb.destination_register == id_ex.rs_reg){ // FIXME issue here the condition is not right for some reason
         control_unit.forwardA = 1;
         mem_wb.mem_data_copy = mem_wb.alu_result;
-        // std::cout << "data hazard triggerd mem rs" << std::endl; //debug
+        if (DEBUG){
+            std::cout << "data hazard triggerd mem-ex rs" << std::endl; //debug
+            std::cout << "forwardA val: " << mem_wb.mem_data_copy << std::endl; //debug
+        }
     }
-    else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rt_reg && 
+    else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && 
         mem_wb.destination_register == id_ex.rt_reg){
          control_unit.forwardB = 1;
          mem_wb.mem_data_copy = mem_wb.alu_result;
-         if (DEBUG)
-            std::cout << "data hazard triggerd mem rt" << std::endl; //debug
-     }
+         if (DEBUG){
+            std::cout << "data hazard triggerd mem-ex rt" << std::endl; //debug
+            std::cout << "forwardB val: " << mem_wb.mem_data_copy << std::endl; //debug
+         }
 
-     if (control_unit.forwardA == 10){
-        control_unit.forwardA = 0;
+    } else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0  && 
+        mem_wb.destination_register == id_ex.rd_reg){
+            control_unit.forwardB = 1;
+            mem_wb.mem_data_copy = mem_wb.alu_result;
+            if (DEBUG)
+                std::cout << "data hazard triggerd mem-ex rs (sw case)" << std::endl; //debug
+                std::cout << "forwardB val (SW case): " << mem_wb.mem_data_copy << std::endl; //debu
+    }
+
+    // integrate into above code 
+    // FIXME, issues with SW storing the wrong value
+    // if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rs_reg && mem_wb.rs_reg != 0){
+    //     control_unit.forwardA = 10;
+    //     mem_wb.mem_data_copy1 = mem_wb.alu_result;
+    // } else if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rt_reg && mem_wb.rs_reg != 0){
+    //     control_unit.forwardB = 10;
+    //     mem_wb.mem_data_copy1 = mem_wb.alu_result;
+    // } 
+
+    // FIXME causing issues with the pipeline forwarding 
+     if (control_unit.forwardA == 10 && ex_mem.rs_reg != SP){
+        // control_unit.forwardA = 0;
+        ex_mem.alu_result += mem_wb.mem_data_copy1;
+     } else if (control_unit.forwardA == 10 && ex_mem.rs_reg == SP) {
         ex_mem.alu_result = mem_wb.mem_data_copy1;
      }
          
     //***************************************************************************************
 
     // mem to mem data hazard: if load immediately followed by a store
-    if (ex_mem.opcode == LW || ex_mem.opcode == LB || ex_mem.opcode == LH || ex_mem.opcode == LUI || ex_mem.opcode == LI){
+    if (ex_mem.opcode == LW || ex_mem.opcode == LB || ex_mem.opcode == LH || ex_mem.opcode == LUI){
         if ((id_ex.opcode == SW || id_ex.opcode == SB || id_ex.opcode == SH) || ((if_id.instruction >> 26) == SW || (if_id.instruction >> 26) == SB || (if_id.instruction >> 26) == SH)){
             // quick fix get rid of PROBLEM CURRENT FIX 4/22 FIXME
             if(id_ex.opcode != ADDI && id_ex.rd != SP){ 
@@ -713,6 +771,7 @@ void CPU::mem(){
 // write back to registers
 void CPU::WB(){
     // Take result from memory not alu and store in reg
+    wb_display.function_opcode = mem_wb.function_opcode;
     wb_display.opcode = mem_wb.opcode; // forward for displaying final stage of pipeline
     // std::cout << "mem_wb alu result: " <<  mem_wb.alu_result << std::endl;
     // if stall reset control signal to 1
@@ -741,21 +800,40 @@ void CPU::WB(){
 
 
     //******data hazard (calculations using a value that has not been written back yet)******
-    if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && mem_wb.destination_register != id_ex.rs_reg && 
+    if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rs_reg && 
         mem_wb.destination_register == id_ex.rs_reg){
             control_unit.forwardA = 10;
             mem_wb.mem_data_copy1 = mem_wb.alu_result;
             if (DEBUG)
-                std::cout << "data hazard triggerd wb rs" << std::endl; //debug
+                std::cout << "data hazard triggerd wb-ex rs" << std::endl; //debug
+                std::cout << "forwardA val1: " << mem_wb.mem_data_copy1 << std::endl; //debug
     }
     else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0 && ex_mem.rd != id_ex.rt_reg && 
         mem_wb.destination_register == id_ex.rt_reg){
-        control_unit.forwardB = 10;
-        mem_wb.mem_data_copy1 = mem_wb.alu_result;
-        if (DEBUG){
-            std::cout << "data hazard triggerd wb rt" << std::endl; //debug
-            std::cout << "mem wb copy data 1: " << mem_wb.mem_data_copy1 << std::endl; //debug
-        }
+            control_unit.forwardB = 10;
+            mem_wb.mem_data_copy1 = mem_wb.alu_result;
+            if (DEBUG){
+                std::cout << "data hazard triggerd wb-ex rt" << std::endl; //debug
+                std::cout << "forwardB val1: " << mem_wb.mem_data_copy1 << std::endl; //debug
+            }
+
+    // FIXME: testing move it after (sw fix)
+    } 
+    else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0  && 
+        mem_wb.destination_register == id_ex.rs_reg && mem_wb.destination_register != id_ex.rd_reg){
+            control_unit.forwardA = 10;
+            mem_wb.mem_data_copy1 = mem_wb.alu_result;
+            if (DEBUG)
+                std::cout << "data hazard triggerd wb-ex rd (sw case)" << std::endl; //debug
+                std::cout << "forwardA val1 (sw case): " << mem_wb.mem_data_copy1 << std::endl; //debug
+
+    } else if (mem_wb.reg_write == 1 && mem_wb.destination_register != 0  && 
+        mem_wb.destination_register == id_ex.rd_reg && mem_wb.destination_register != id_ex.rs_reg ){
+            control_unit.forwardB = 10;
+            mem_wb.mem_data_copy1 = mem_wb.alu_result; // quickfix
+            if (DEBUG)
+                std::cout << "data hazard triggerd wb-ex rs (sw case)" << std::endl; //debug
+                std::cout << "forwardB val1 (SW case): " << mem_wb.mem_data_copy1 << std::endl; //debu
     }
 
     if (mem_wb.mem_write == 1 && mem_wb.destination_register == ex_mem.rs_reg){
@@ -764,13 +842,27 @@ void CPU::WB(){
     }
 
     // integrate into above code 
-    if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rs_reg){
+    // FIXME, issues with SW storing the wrong value
+    if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rs_reg && mem_wb.rs_reg != 0){
         control_unit.forwardA = 10;
         mem_wb.mem_data_copy1 = mem_wb.alu_result;
-    } else if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rt_reg){
+        if (DEBUG){
+            std::cout << "SW case 2 triggered (WB)" << std::endl;
+            std::cout << "forwardA val1: " << mem_wb.mem_data_copy1 << std::endl;
+        }
+    } else if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rt_reg && mem_wb.rs_reg != 0){
         control_unit.forwardB = 10;
         mem_wb.mem_data_copy1 = mem_wb.alu_result;
-    }
+        if (DEBUG){
+            std::cout << "SW case 2 triggered (WB)" << std::endl;
+            std::cout << "forwardB val1: " << mem_wb.mem_data_copy1 << std::endl;
+        }
+    } 
+
+    // else if (mem_wb.mem_write == 1 && mem_wb.rs_reg == id_ex.rt_reg && ex_mem.destination_register != SP){
+    //     control_unit.forwardB = 5;
+    //     mem_wb.mem_data_copy1 = mem_wb.alu_result;
+    // }
     //***************************************************************************************
 
 }

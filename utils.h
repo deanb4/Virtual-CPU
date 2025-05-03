@@ -224,7 +224,7 @@ namespace utils{
         
     }
 
-    std::string get_opcode(const uint8_t hex_opcode){
+    std::string get_opcode(const uint8_t hex_opcode, const uint8_t function_opcode){
         std::string ret_opcode = "";
         std::unordered_map<uint8_t, std::string> opcodes{
             {0x20, "ADD"},
@@ -268,9 +268,10 @@ namespace utils{
             std::cerr << "Invalid Opcode" << std::endl;
             ret_opcode = "Unkown";
 
-        } else if (hex_opcode == 0x00){
-            ret_opcode = "0";
-        
+        } else if (hex_opcode == 0x00 && function_opcode != 0x00){
+            ret_opcode = opcodes[function_opcode];
+        } else if (hex_opcode == 0x00 && function_opcode == 0x00){
+            ret_opcode = "NOP";
         } else
             ret_opcode = opcodes[hex_opcode];
         

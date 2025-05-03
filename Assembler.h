@@ -16,7 +16,6 @@
 #include <bitset>
 #include <ranges>
 #include "opcodes.h"
-#include <ranges>
 
 using std::string;
 using std::vector;
@@ -24,6 +23,7 @@ using std::map;
 using std::pair;
 
 //TODO ADD STRUCT FOR VARS
+bool mult_inst = false;
 
 class Assembler {
 
@@ -35,7 +35,13 @@ public:
 
     int encodeInstructions(vector<uint32_t>&);
 
+    
+    string inst_copy;
+    
 private:
+    
+    string opcode_copy; 
+
     static vector<string> parser(const string&, const string&);
 
     static string parser(const string&, char);

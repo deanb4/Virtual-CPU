@@ -17,6 +17,7 @@
 #include "syscalls.h"
 #include "pipeline_registers.h"
 #include "control_unit.h"
+#include <iomanip>
 
 #define TEXT_MEMORY 0x00000000
 #define TEXT_MEMORY_BOUND 0x000FFFFF
@@ -30,8 +31,8 @@
 #define i32 int32_t
 #define ui8 uint8_t
 #define ui16 uint16_t
-#define DEBUG 0
-#define PERF 0
+#define DEBUG 1
+#define PERF 1
 
 // ***** UPDATES *****
 // create function that handles exception: takes flags check if exeption flag is true

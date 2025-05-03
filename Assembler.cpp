@@ -4,11 +4,12 @@
 
 #include "Assembler.h"
 #include "opcodes.h"
+
 // constructor
 Assembler::Assembler(const string& asm_instructions, const string& divider) {
     instructions_input_debug = asm_instructions;
     separator_debug = divider;
-
+    inst_copy = "";
     instructions = parser(asm_instructions, divider);
 }
 
@@ -21,7 +22,7 @@ int Assembler::encodeInstructions(vector<uint32_t> & encoded_instructions) {//TO
 
     for (int i = 0; i < instructions.size(); i++) {
         if (!getOpAndInstructionType(instructions[i], opcode, instruction_type)) {return i;}
-
+        
         switch (instruction_type) {
             case 'R':
                 encoded_instruction = rType(instructions[i], opcode);
@@ -39,11 +40,29 @@ int Assembler::encodeInstructions(vector<uint32_t> & encoded_instructions) {//TO
                 return i;
         }
 
-        if (encoded_instruction == "N") {return i;}
+        // la case
+        if (mult_inst){
+            uint32_t full_encode2;
+            string ori;
+            std::vector<string> new_inst = parser(encoded_instruction, "\n");
+            string lui = new_inst[0];
+            uint32_t full_encode1= stoll(lui,nullptr,2);
+            encoded_instructions.push_back(full_encode1);
+            if (new_inst.size() > 1){
+                ori = new_inst[1]; 
+                full_encode2= std::stoll(ori, nullptr, 2);
+                encoded_instructions.push_back(full_encode2);
+            }
+            mult_inst = false;
+        } else {
 
-        uint32_t full_encode = stoll(encoded_instruction, nullptr, 2);
+            if (encoded_instruction == "N") {return i;}
 
-        encoded_instructions.push_back(full_encode);
+            uint32_t full_encode = stoll(encoded_instruction, nullptr, 2);
+
+            encoded_instructions.push_back(full_encode);
+        }
+
     }
 
     return -1;
@@ -133,6 +152,7 @@ bool Assembler::getOpAndInstructionType(const string& instruction, string& opcod
         {"bltz", {"111100", 'I'}},
         {"lui", {"001111", 'I'}},
         {"li", {"111001", 'I'}}, // skip for now
+        {"la", {"000000", 'I'}}, 
 
         // J type
         {"j", {"110011", 'J'}},
@@ -266,7 +286,7 @@ string Assembler::rType(const string &reg, const string& opcode) const {
     try {
         const size_t argc = registers.size();
 
-        constexpr int MAX_BITSIZE = 5;
+        constexpr int MAX_BITSIZE = 5; 
 
         if (argc == 0 || argc > 3) {throw std::invalid_argument("Invalid number of args");}
 
@@ -329,7 +349,9 @@ string Assembler::rType(const string &reg, const string& opcode) const {
 string Assembler::iType(const string &reg, const string& opcode) const {
     //flag to make sure specific unique itype instructions are correct,
     string syntax_flag = parser(reg, ' ');
-
+    bool check = false;
+    string temp_op= "";
+    string instruction_two;
     //remove instruction so only registers and consts are left
     // TODO see about moving this encodeInstructions method
     string temp = reg;
@@ -374,7 +396,7 @@ string Assembler::iType(const string &reg, const string& opcode) const {
                     if (!validStoreReg(registers[0])) {throw std::invalid_argument("Invalid register");}
                     if (!anyBaseToBinary(registers[2], MAX_BITSIZE, imm)) {throw std::invalid_argument("Invalid imm");}
                     rt = register_encode_map.at(registers[0]);
-                    rs = register_encode_map.at(registers[1]);
+                    rs = register_encode_map.at(registers[1]);    
                 break;
 
                 case XORI:
@@ -481,6 +503,27 @@ string Assembler::iType(const string &reg, const string& opcode) const {
                     rs = "00000";
                 break;
 
+                case LI:
+                    if (!anyBaseToBinary(registers[1], MAX_BITSIZE, imm)) {throw std::invalid_argument("Invalid imm");}
+                    rt = register_encode_map.at(registers[0]);
+                    rs = "00000";
+                break;
+                
+                // la case: turn instruction into lui case (need to get it to add ori too if needed)
+                case 000000:
+                    std::cout << "case 000000" << std::endl;
+                    temp_op = "001111";
+                    check = true;
+                    if (!anyBaseToBinary(registers[1], MAX_BITSIZE, imm)) {throw std::invalid_argument("Invalid imm");}
+                    rt = register_encode_map.at(registers[0]);
+                    rs = "00000";
+                    // TODO fix so that instruction two returns to main function and is pushed into instruction vector after lui
+                    if (std::stoll(imm) > (1 << 16)){
+                        instruction_two = "001101" + rt + rt + imm;
+                        std::cout << std::hex << instruction_two << std::endl;
+                    }
+                break;
+
                 default:
                     throw std::invalid_argument("Invalid opcode");
                 break;
@@ -488,10 +531,16 @@ string Assembler::iType(const string &reg, const string& opcode) const {
 
         } else {throw std::invalid_argument("Unknown syntax");}
 
-        encoded_registers = opcode + rs + rt + imm;
+        if (check){
+            encoded_registers = temp_op + rs + rt + imm + "\n" + instruction_two;
+            mult_inst = true;
+            
+        } else
+            encoded_registers = opcode + rs + rt + imm;
 
     } catch (...) {encoded_registers = "N";}
 
+    // inst_copy = instruction_two;
     return encoded_registers;
 }
 
